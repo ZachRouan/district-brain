@@ -19,7 +19,7 @@ class Document(models.Model):
         TIER_2 = 2, "Tier 2 — curriculum & lesson plans (not enabled)"
         TIER_3 = 3, "Tier 3 — student records (not enabled)"
 
-    ENABLED_TIERS = (Tier.TIER_1,)
+    ENABLED_TIERS = (Tier.TIER_1, Tier.TIER_2)
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -62,11 +62,14 @@ class Document(models.Model):
         ordering = ["title"]
         constraints = [
             # The tier discipline made physical: the database itself refuses to
-            # store anything above Tier 1 in this build, so no code path — a raw
-            # ORM save, a bulk import, a future bug — can slip student-data-tier
-            # rows in behind the clean() validation. Keep this in lockstep with
-            # ENABLED_TIERS; widening the corpus is a deliberate, migrated change.
-            models.CheckConstraint(condition=Q(tier=1), name="document_tier_1_only"),
+            # store anything above the enabled tiers, so no code path — a raw ORM
+            # save, a bulk import, a future bug — can slip student-data-tier
+            # (Tier 3) rows in behind the clean() validation. Keep this in
+            # lockstep with ENABLED_TIERS; widening the corpus is a deliberate,
+            # migrated change.
+            models.CheckConstraint(
+                condition=Q(tier__in=[1, 2]), name="document_enabled_tiers_only"
+            ),
         ]
 
     def __str__(self):

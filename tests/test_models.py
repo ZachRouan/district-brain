@@ -30,21 +30,24 @@ def test_document_scopes_to_roles():
     assert set(doc.allowed_roles.values_list("slug", flat=True)) == {"teacher", "staff"}
 
 
-def test_document_rejects_tiers_above_one():
-    """Tier 2/3 corpora are not enabled in this build; the model must refuse them."""
-    for tier in (2, 3):
-        doc = Document(title="Out of scope", tier=tier)
-        with pytest.raises(ValidationError):
-            doc.full_clean()
+def test_document_rejects_only_tier_three():
+    """Tier 1 and Tier 2 are enabled; only Tier 3 (student records) is refused by clean()."""
+    ok = Document(title="Curriculum map", tier=2)
+    ok.full_clean()  # must not raise
+
+    bad = Document(title="Out of scope", tier=3)
+    with pytest.raises(ValidationError):
+        bad.full_clean()
 
 
-def test_database_refuses_a_direct_tier_two_save():
+def test_database_refuses_a_direct_tier_three_save():
     """clean() guards the admin path, but a raw ORM save bypasses validation.
-    The CheckConstraint makes the tier discipline physical: the database itself
-    rejects a Tier 2 row, so no code path can slip student-data-tier documents in.
-    """
+    The CheckConstraint keeps the tier discipline physical: the database itself
+    still rejects a Tier 3 row, so no code path can slip student-data-tier
+    documents in. Tier 2 now saves cleanly."""
+    Document.objects.create(title="Legit Tier 2 map", tier=2)  # must not raise
     with pytest.raises(IntegrityError):
-        Document.objects.create(title="Sneaky Tier 2", tier=2)
+        Document.objects.create(title="Sneaky Tier 3", tier=3)
 
 
 def test_document_defaults_to_tier_one_and_pending_status():
