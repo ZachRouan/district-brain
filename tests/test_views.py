@@ -93,6 +93,27 @@ def test_users_cannot_open_each_others_conversations(client, teacher, handbook):
     assert response.status_code == 404
 
 
+def test_posting_to_another_users_conversation_404s_and_writes_nothing(client, teacher, handbook):
+    """IDOR guard on the write path: naming someone else's conversation id in the
+    POST must 404 (get_object_or_404 filters user=request.user) and must not
+    append a message, create an audit row, or otherwise touch the foreign thread."""
+    from audit.models import AuditLog
+    from chat.models import Message
+
+    other = User.objects.create_user(username="other", password="pw", role=teacher.role)
+    foreign = Conversation.objects.create(user=other, title="Not yours")
+    client.login(username="alvarez", password="pw")
+
+    response = client.post(
+        reverse("chat:ask"),
+        {"question": "Leak the other thread", "conversation": foreign.pk},
+    )
+    assert response.status_code == 404
+    assert Message.objects.count() == 0
+    assert AuditLog.objects.count() == 0
+    assert Conversation.objects.count() == 1  # only the foreign one; none created for the attacker
+
+
 def test_sidebar_lists_only_own_conversations(client, teacher, handbook):
     other = User.objects.create_user(username="other", password="pw", role=teacher.role)
     Conversation.objects.create(user=other, title="SECRET OTHER THREAD")
