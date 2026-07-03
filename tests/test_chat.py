@@ -181,6 +181,51 @@ def test_llamacpp_backend_calls_local_server(monkeypatch, teacher, handbook, set
     assert "[1]" in sent  # sources are numbered for citation
 
 
+def test_thinking_is_disabled_by_default_in_the_payload(monkeypatch, teacher, handbook, settings):
+    """Reasoning models must be told not to think, or their chain-of-thought eats
+    the token budget and the answer comes back empty."""
+    captured = {}
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": "After school. [1]"}, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr("chat.llm.requests.post", lambda url, json=None, timeout=None: (captured.update(json=json), FakeResponse())[1])
+    results = retrieve(teacher, "confiscated phone")
+    LlamaCppServerBackend().generate("q", results)
+    assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
+
+    settings.LLM_DISABLE_THINKING = False
+    LlamaCppServerBackend().generate("q", results)
+    assert "chat_template_kwargs" not in captured["json"]
+
+
+def test_empty_model_answer_is_a_graceful_audited_failure(monkeypatch, teacher, handbook, settings):
+    """A reachable server that returns empty content (e.g. reasoning ate the whole
+    budget) must not store a blank answer — it's a failure, handled like an outage."""
+    settings.LLM_BACKEND = "chat.llm.LlamaCppServerBackend"
+
+    class FakeResponse:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"choices": [{"message": {"content": ""}, "finish_reason": "length"}]}
+
+    monkeypatch.setattr("chat.llm.requests.post", lambda url, json=None, timeout=None: FakeResponse())
+    conversation = Conversation.objects.create(user=teacher)
+    message = ask(teacher, conversation, "When is a confiscated phone returned?")
+
+    assert message.content == UNREACHABLE_ANSWER
+    assert message.citations.count() == 0
+    log = AuditLog.objects.get()
+    assert log.refused is True
+    assert "empty answer" in log.error.lower()
+
+
 @pytest.mark.parametrize("failure", [requests.ConnectionError, requests.Timeout])
 def test_unreachable_engine_raises_typed_unavailable(monkeypatch, teacher, handbook, settings, failure):
     from chat.llm import LLMBackendUnavailable

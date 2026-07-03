@@ -129,13 +129,23 @@ verbatim quotes of retrieved passages). To use a real local model:
 
 1. Run a [llama.cpp](https://github.com/ggml-org/llama.cpp) server on the same box or
    LAN with your chosen instruction-tuned GGUF model:
-   `llama-server -m <model>.gguf --port 8080`
+   `llama-server -m <model>.gguf --port 8080 --jinja`
 2. In `.env`: `LLM_BACKEND=chat.llm.LlamaCppServerBackend` and
-   `LLAMA_SERVER_URL=http://127.0.0.1:8080`. Restart.
+   `LLAMA_SERVER_URL=http://127.0.0.1:<port>`. Restart.
 
 That is the entire switch. Retrieval scoping, citations, refusal behavior, and auditing
 are identical in both modes — the model only ever sees passages the asking user was
 entitled to. The system prompt lives in `chat/llm.py` (`SYSTEM_PROMPT`).
+
+**Reasoning models (Qwen3, DeepSeek-R1, etc.):** these emit chain-of-thought that llama.cpp
+returns in a separate `reasoning_content` field. Left on, it burns the generation budget and
+can leave the actual answer empty. District Brain disables it by default
+(`LLM_DISABLE_THINKING=true`), which **requires the server to run with `--jinja`** so the
+chat template honours the setting. If answers come back as "The answer engine is unavailable"
+with an audit `error` mentioning an *empty answer*, the server was almost certainly started
+without `--jinja` (or the model isn't the one you think). Verified in this deployment with
+Qwen3.6-35B-A3B (Q4_K_M) at 192K context — grounded, cited answers in a few seconds after
+model warmup.
 
 ## 9. Production serving
 

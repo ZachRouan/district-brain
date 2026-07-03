@@ -130,6 +130,16 @@ LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
 # closet-grade box and stops a runaway generation; answers are short by design.
 LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "1024"))
 
+# Reasoning models (e.g. Qwen3) emit chain-of-thought that llama.cpp returns in a
+# separate `reasoning_content` field — burning generation budget and latency for
+# no benefit on grounded extraction, and (if the budget runs out mid-thought)
+# leaving the answer `content` empty. District Brain's task is to quote and cite
+# provided passages, so thinking is disabled by default. Requires the llama.cpp
+# server to run with --jinja (so the chat template honours the kwarg); harmless
+# for models that don't reason. Set false if you deliberately want a reasoning
+# model to think.
+LLM_DISABLE_THINKING = env_bool("LLM_DISABLE_THINKING", True)
+
 # Retrieval tuning. MAX_DISTANCE is cosine distance (0 = identical); anything
 # farther than the cutoff is treated as "no relevant sources" and the assistant
 # says so instead of guessing.

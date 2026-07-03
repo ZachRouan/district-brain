@@ -67,15 +67,23 @@ class LlamaCppServerBackend:
             },
         ]
 
+    def build_payload(self, question, retrieved):
+        payload = {
+            "messages": self.build_messages(question, retrieved),
+            "temperature": 0.2,
+            "max_tokens": settings.LLM_MAX_TOKENS,
+        }
+        if settings.LLM_DISABLE_THINKING:
+            # Requires the server's --jinja chat template; drops the reasoning
+            # phase so the answer lands in `content` instead of reasoning_content.
+            payload["chat_template_kwargs"] = {"enable_thinking": False}
+        return payload
+
     def generate(self, question, retrieved):
         try:
             response = requests.post(
                 f"{self.base_url}/v1/chat/completions",
-                json={
-                    "messages": self.build_messages(question, retrieved),
-                    "temperature": 0.2,
-                    "max_tokens": settings.LLM_MAX_TOKENS,
-                },
+                json=self.build_payload(question, retrieved),
                 timeout=self.timeout,
             )
         except (requests.ConnectionError, requests.Timeout) as exc:
@@ -83,7 +91,21 @@ class LlamaCppServerBackend:
             # unavailability so ask() can answer gracefully and audit the failure.
             raise LLMBackendUnavailable(f"{self.base_url}: {exc}") from exc
         response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
+
+        choice = response.json()["choices"][0]
+        content = (choice.get("message", {}).get("content") or "").strip()
+        if not content:
+            # A reachable server that returns no answer text — most often a
+            # reasoning model whose thinking consumed the whole token budget
+            # (finish_reason "length") before emitting an answer, or a server not
+            # started with --jinja so thinking couldn't be disabled. Treat it as a
+            # failure, not a blank answer stored as if it were real.
+            raise LLMBackendUnavailable(
+                f"{self.base_url}: model returned an empty answer "
+                f"(finish_reason={choice.get('finish_reason')!r}). If this is a reasoning model, "
+                "run the server with --jinja and keep LLM_DISABLE_THINKING enabled, or raise LLM_MAX_TOKENS."
+            )
+        return content
 
 
 def get_llm_backend():

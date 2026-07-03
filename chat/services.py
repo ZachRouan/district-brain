@@ -28,7 +28,7 @@ NO_SOURCES_ANSWER = (
 )
 
 UNREACHABLE_ANSWER = (
-    "The answer engine is unreachable right now, so I can't answer this — "
+    "The answer engine is unavailable right now, so I can't answer this — "
     "please tell your District Brain administrator. Your question was logged."
 )
 
