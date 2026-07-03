@@ -1,8 +1,8 @@
 # Tier 2 — Curriculum & Lesson-Plan Ingestion + Metadata Schema
 
-**Status:** Living draft — Phase 1 schema is stable and approved; Phase 2 fields (SIS / section / school-year), the social-studies grammar, and the §9 open questions are **provisional** and will be revised once school + SIS facts and a Drive sample arrive.
+**Status:** Living draft — Phase 1 + Phase 2 are both in build scope; Phase 2's relationship-access engine runs on a **synthetic SIS adapter**, so it needs no real student data or real SIS. What stays **provisional** (revised once school + SIS facts and a Drive sample arrive): the concrete real-district SIS adapter, the social-studies grammar, and the §9 open questions.
 **Date:** 2026-07-03 (last revised 2026-07-03)
-**Scope decision:** Full metadata schema specified now; **Phase 1 build = district-consensus corpus only** (curriculum maps, pacing guides, scope & sequence). Teacher-authored lesson/unit plans + relationship-based access are **Phase 2**, gated on the SIS (Student Information System) org-graph + multi-role users.
+**Scope decision:** Build **both phases**. Phase 1 = the district-consensus corpus (curriculum maps, pacing guides, scope & sequence). Phase 2 = teacher-authored lesson/unit plans + relationship-based access, built as an **SIS (Student Information System)-agnostic engine behind a pluggable adapter** and developed/tested against a **synthetic adapter**. Adapting to a real district's SIS — yours or another school's — is then implementing one adapter against a fixed interface (§5).
 
 > Ohio standard-code grammars below were extracted from the official Ohio Department of Education and Workforce (ODEW, formerly ODE) standards PDFs; the initial "uniform grade-band code" assumption was **caught and corrected** during verification — Ohio uses four distinct per-subject grammars and Ohio science is *not* NGSS (Next Generation Science Standards). Sources are listed at the end.
 >
@@ -102,6 +102,10 @@ Every standard *mention* found in a document, resolved or not.
 
 `Document.ENABLED_TIERS` becomes `(Tier.TIER_1, Tier.TIER_2)` and the `document_tier_1_only` CheckConstraint widens to `tier__in=[1, 2]` (kept as a physical guard so **Tier 3 still cannot be stored**, by any code path). This is the deliberate, migrated widening the Tier-1 constraint comment anticipated. Per the project charter non-negotiable #3, activating Tier 2 is also a *process* gate (Tier 1 running cleanly + board awareness) — the migration is the technical half of a decision made outside the code. The existing tier-guard tests in `tests/test_models.py` must be updated in lockstep (see §8).
 
+### 2.5 Multi-role users (`accounts` change)
+
+Phase 2 relationships assume a person can hold several roles at once (teacher **and** coach; a principal who also teaches a section). Today `User` holds exactly one `Role` (`accounts/models.py`); PROJECT.md's design notes flag multi-role as the required step toward relationship-based access. The change: `User.role` (single FK) → a many-to-many (or a `UserRole` through model), and every `visible_documents()` caller unions the user's role scopes. This touches the `accounts` model and the retrieval boundary, so it lands with Phase 2, behind the same scoping tests.
+
 ---
 
 ## 3. Standard-code extraction & resolution
@@ -162,18 +166,38 @@ Extends the existing pipeline (`corpus/extractors.py`, `corpus/chunking.py`, `co
 
 ## 5. Access model
 
-### Phase 1 (this build)
+### Phase 1 — consensus corpus (role-based, unchanged mechanism)
 
-Consensus documents scope by `Role` exactly as Tier 1 does — `visible_documents(user)` is unchanged in mechanism. `authorship_level=district_consensus` documents are attached to the staff role(s); retrieval filters by role membership as today. **No relationship logic, no org graph, no prompt-level filtering.** The security boundary — `visible_documents()` and its scoping tests (`tests/test_retrieval_scoping.py`) — stays untouched. (Enabling Tier 2 *does* require updating the separate tier-**guard** tests in `tests/test_models.py`; see §8.)
+Consensus documents scope by `Role` exactly as Tier 1 does — `visible_documents(user)` is unchanged in mechanism. `authorship_level=district_consensus` documents are attached to the staff role(s); retrieval filters by role membership as today. **No relationship logic, no prompt-level filtering.** The security boundary — `visible_documents()` and its scoping tests (`tests/test_retrieval_scoping.py`) — is extended, never loosened. (Enabling Tier 2 also requires updating the separate tier-**guard** tests in `tests/test_models.py`; see §8.)
 
-### Phase 2 (deferred, described so Phase 1 doesn't foreclose it)
+### Phase 2 — relationship-based access, SIS-agnostic
 
-Teacher-authored plans require, in roughly this order:
-1. **Multi-role users** (`accounts` change flagged in PROJECT.md design notes) — a person holds several relationships.
-2. **SIS org-graph** — rosters, feeder patterns, year-over-year student-teacher links, sections.
-3. **Relationship-scoped retrieval** — `visible_documents()` gains a graph-traversal branch keying off `authorship_level=individual_teacher` + `sis_teacher_id`/`sis_section_id`/`school_year` + feeder edges.
+Built now, against a **synthetic SIS adapter** — no real student data, no real SIS required (tier discipline). Adapting to a real district is implementing one adapter against the interface below.
 
-Phase 1's schema already carries the fields Phase 2 keys off, so no Tier 2 re-ingest is needed when the graph arrives.
+**The org-graph, abstracted.** The access engine consumes an `SISAdapter` interface, never a specific vendor. Entities it exposes:
+
+- `Student(id)`
+- `Staff(id)` → maps to a District Brain `User`
+- `Section(id, subject, grade, school_year, teacher_id)` — a class in a given year
+- `Enrollment(student_id, section_id, school_year)` — who was in what class, when
+- **Feeder edges** — derived from enrollment history: a current section's students trace back to their prior-year sections (the "feeder homerooms").
+
+**Adapter interface (roughly):**
+- `sections_for_teacher(teacher_id, school_year) -> [Section]`
+- `students_in_section(section_id) -> [student_id]`
+- `feeder_sections(teacher_id, current_year) -> [Section]` — current students → their prior-year sections
+
+**Resolving the canonical rule.** *"A 3rd-grade teacher may see last year's 2nd-grade plans for the feeder homerooms of her current students"* becomes: `feeder_sections(teacher, current_year)` → a set of `(section_id, school_year)` pairs the teacher is entitled to. `visible_documents(user)` then returns:
+
+> consensus docs (role-based, Phase 1) **∪** teacher plans where `authorship_level=individual_teacher AND (sis_section_id, school_year) ∈ entitled feeder set` **∪** the user's own authored plans.
+
+Scoping stays a database filter, computed before similarity — never a prompt instruction.
+
+**Synthetic adapter.** A generated K-5 building (rosters, sections, multi-year enrollment, feeder patterns) implements `SISAdapter` for dev and test. The full engine — and the "motivated 14-year-old" red-team (a student probing for another's records, a teacher reaching for a non-feeder section's plans, year-boundary edges) — runs on it with zero real data.
+
+**Per-district adapters (the "different schools" path).** PowerSchool, Infinite Campus, ProgressBook, Skyward, Aeries each implement the same interface; the engine is unchanged. This is both the maintenance story and the go-to-market wedge (non-PowerSchool districts have no vendor path today).
+
+Phase 1's schema already carries every field Phase 2 keys off (`authorship_level`, `sis_teacher_id`, `sis_section_id`, `school_year`), so no Tier 2 re-ingest is needed as adapters arrive.
 
 **Invariant:** standard codes are shared retrieval keys and must **never** grant access. Any design where a resolved code widens entitlement is rejected.
 
@@ -199,17 +223,21 @@ Phase 1 largely sidesteps this (consensus docs carry no student data), but the i
 
 ---
 
-## 8. Phase 1 scope boundary (what's in / out)
+## 8. Scope boundary (what's in / out)
 
-**In:** `CurriculumMetadata`, `AcademicStandard`, `StandardReference` models + migrations; widen `ENABLED_TIERS`/CheckConstraint to Tier 2; **update the tier-guard tests in `tests/test_models.py` (`test_document_rejects_tiers_above_one`, `test_database_refuses_a_direct_tier_two_save`) to reject only Tier 3, matching the widened guard**; `import_standards` command (Ohio CSP data); four-grammar extractor + normalization + Stage-1 resolution + unresolved bucket; header alias table + pacing-guide table-association chunking; ingest of `district_consensus` artifacts scoped by role; tier-3 content-scrub hook (pass-through for consensus docs); labeled eval harness for Stage-2 (built, even if Stage-2 use is minimal in Phase 1).
+Both phases are in build scope. Phase 2's relationship engine is built and tested on the synthetic SIS adapter.
 
-**Out (Phase 2+):** teacher lesson/unit-plan ingestion; multi-role users; SIS org-graph + relationship-scoped retrieval; section/feeder/year-over-year access; Stage-2 semantic auto-suggestion in production; social-studies parser; Drive `appProperties` write-back.
+**In — Phase 1 (corpus + standards foundation):** `CurriculumMetadata`, `AcademicStandard`, `StandardReference` models + migrations; widen `ENABLED_TIERS`/CheckConstraint to Tier 2; **update the tier-guard tests in `tests/test_models.py` (`test_document_rejects_tiers_above_one`, `test_database_refuses_a_direct_tier_two_save`) to reject only Tier 3, matching the widened guard**; `import_standards` command (Ohio CSP data); four-grammar extractor + normalization + Stage-1 resolution + unresolved bucket; header alias table + pacing-guide table-association chunking; ingest of `district_consensus` artifacts scoped by role; tier-3 content-scrub hook; labeled eval harness for Stage-2.
+
+**In — Phase 2 (relationship engine, on synthetic SIS):** multi-role users (`accounts` change + retrieval union); the `SISAdapter` interface + a **synthetic adapter** (generated rosters/sections/enrollments/feeder patterns); the relationship-scoped `visible_documents()` branch; ingest of teacher-authored unit/lesson plans with the tier-3 scrub enforced; the "motivated 14-year-old" red-team test suite against the synthetic building.
+
+**Out (deferred — needs real facts):** the concrete **real-district SIS adapter** (yours or another school's — waits on §9 answers about what your SIS exposes); anything gated on the **per-section-vs-grade-team authoring** fact (§9 Q1) — the engine is built and correct, but real `sis_section_id` population in *your* building waits on that answer; the **social-studies parser** (grammar unverified); Stage-2 semantic auto-suggestion in production (built as a harness, off by default until the eval passes); Drive `appProperties` write-back.
 
 ---
 
 ## 9. Open questions — deferred to colleagues / a Drive sample  _(provisional — this list shrinks as answers arrive)_
 
-These block the Phase 2 lesson-plan half; nothing web research can answer. Phrased as precise asks so the conversation is short:
+These no longer block *building* Phase 2 (the engine runs on the synthetic adapter) — they gate its **real-data payoff in your building** and the shape of your real SIS adapter. Nothing web research can answer; only colleagues + your SIS + a Drive sample. Phrased as precise asks so the conversation is short:
 
 1. Are lesson plans authored **per-section**, or **shared across a grade-level team**? (Decides whether `sis_section_id` is fillable — and whether the flagship feeder feature is realizable from existing artifacts at all.)
 2. Does the **SIS expose** section→file / teacher→course-**year** links, and the **feeder-pattern graph**? (Without these org-graph keys, relationship access can't resolve at retrieval time.)
