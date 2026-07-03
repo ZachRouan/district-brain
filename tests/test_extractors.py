@@ -1,5 +1,8 @@
+import io
+
 import pytest
 
+from corpus.chunking import chunk_text
 from corpus.extractors import UnsupportedFormat, extract_text
 
 
@@ -67,3 +70,73 @@ def test_unsupported_extension(tmp_path):
     path.write_bytes(b"not really a spreadsheet")
     with pytest.raises(UnsupportedFormat):
         extract_text(path)
+
+
+# --- Table enrichment: rows become sentence-shaped, context- and header-labeled,
+#     each its own chunk, so tabular facts are retrievable by plain questions. ---
+
+BELL_MD = (
+    "# Bell Schedules 2026-27\n\n"
+    "## Regular schedule\n\n"
+    "| Period | Start | End |\n"
+    "| --- | --- | --- |\n"
+    "| First Period | 7:50 AM | 8:38 AM |\n"
+    "| Second Period | 8:42 AM | 9:30 AM |\n"
+)
+
+
+def test_markdown_table_rows_are_enriched_with_heading_and_headers():
+    text = extract_text(io.BytesIO(BELL_MD.encode()), filename="bell.md", title="Bell Schedules 2026-27")
+    assert "Regular schedule: Period: First Period, Start: 7:50 AM, End: 8:38 AM" in text
+    # Each row is its own chunk, not merged into a diluted table blob.
+    chunks = chunk_text(text)
+    assert "Regular schedule: Period: First Period, Start: 7:50 AM, End: 8:38 AM" in chunks
+    assert "Regular schedule: Period: Second Period, Start: 8:42 AM, End: 9:30 AM" in chunks
+    # The nearest heading is the context; the standalone title is not prepended
+    # onto rows (it dilutes retrieval and already appears on every citation).
+    assert "Bell Schedules 2026-27: Period:" not in text
+
+
+def test_markdown_non_table_content_is_unchanged():
+    md = "# Heading\n\nA plain paragraph about silenced devices.\n\nAnother paragraph."
+    text = extract_text(io.BytesIO(md.encode()), filename="p.md")
+    assert "A plain paragraph about silenced devices." in text
+    assert "\f" not in text  # no table, no hard boundaries introduced
+
+
+def test_html_table_with_headers_is_enriched():
+    html = (
+        "<h2>Regular schedule</h2>"
+        "<table><tr><th>Period</th><th>Start</th><th>End</th></tr>"
+        "<tr><td>First Period</td><td>7:50 AM</td><td>8:38 AM</td></tr></table>"
+    )
+    text = extract_text(io.BytesIO(html.encode()), filename="s.html", title="Bell Schedules")
+    assert "Regular schedule: Period: First Period, Start: 7:50 AM, End: 8:38 AM" in text
+
+
+def test_html_headerless_table_falls_back_to_pipes_with_context():
+    html = "<h2>Room status</h2><table><tr><td>Gymnasium</td><td>Open</td></tr></table>"
+    text = extract_text(io.BytesIO(html.encode()), filename="s.html")
+    assert "Room status: Gymnasium | Open" in text
+
+
+def test_docx_table_rows_are_enriched():
+    import docx
+
+    d = docx.Document()
+    d.add_heading("Regular schedule", level=2)
+    table = d.add_table(rows=3, cols=3)
+    data = [("Period", "Start", "End"), ("First Period", "7:50 AM", "8:38 AM"), ("Second Period", "8:42 AM", "9:30 AM")]
+    for r, (a, b, c) in enumerate(data):
+        table.rows[r].cells[0].text, table.rows[r].cells[1].text, table.rows[r].cells[2].text = a, b, c
+    buf = io.BytesIO()
+    d.save(buf)
+    buf.seek(0)
+    text = extract_text(buf, filename="sched.docx", title="Bell Schedules")
+    assert "Regular schedule: Period: First Period, Start: 7:50 AM, End: 8:38 AM" in text
+
+
+def test_table_with_no_heading_falls_back_to_the_document_title():
+    md = "| Period | Start |\n| --- | --- |\n| First Period | 7:50 AM |\n"
+    text = extract_text(io.BytesIO(md.encode()), filename="bare.md", title="Bell Schedules 2026-27")
+    assert "Bell Schedules 2026-27: Period: First Period, Start: 7:50 AM" in text

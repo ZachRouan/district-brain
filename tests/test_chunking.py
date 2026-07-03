@@ -43,3 +43,21 @@ def test_oversized_single_paragraph_is_split():
 def test_whitespace_is_normalized():
     chunks = chunk_text("First   line\n\n\n\nSecond    line\r\nThird line")
     assert chunks == ["First line\n\nSecond line Third line"]
+
+
+def test_form_feed_is_a_hard_chunk_boundary():
+    """Extractors insert \\f to keep atomic units (table rows) from merging."""
+    assert chunk_text("Alpha\fBeta\fGamma") == ["Alpha", "Beta", "Gamma"]
+
+
+def test_form_feed_keeps_short_table_rows_separate():
+    # Two short rows that would otherwise pack into one ~1200-char chunk.
+    text = "Regular schedule: Period: First Period, Start: 7:50 AM\fRegular schedule: Period: Second Period, Start: 8:42 AM"
+    chunks = chunk_text(text)
+    assert len(chunks) == 2
+    assert chunks[0].endswith("7:50 AM")
+    assert chunks[1].endswith("8:42 AM")
+
+
+def test_form_feed_edges_do_not_produce_empty_chunks():
+    assert chunk_text("\fRow one\fRow two\f") == ["Row one", "Row two"]

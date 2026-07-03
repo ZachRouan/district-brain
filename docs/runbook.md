@@ -243,6 +243,14 @@ scope, so the model never saw it. Check the audit row to confirm what was retrie
 - `RETRIEVAL_TOP_K_CAP` (default 20) and `RETRIEVAL_MAX_DISTANCE_CAP` (default 1.0) are hard
   ceilings `retrieve()` enforces on its own arguments; the defaults above operate well under
   them. You shouldn't need to touch the caps.
+- **Tabular documents (schedules, tables) embed poorly as raw rows.** Ingestion enriches each
+  table row into a sentence-shaped chunk carrying its heading and column labels (e.g. "Regular
+  schedule: Period: Period 1, Start: 7:50 AM, End: 8:38 AM") so a plain question can match it.
+  If a fact you *know* is in a document gets "I don't have that", **open the document in admin →
+  Corpus → Chunks and read the actual chunk text before touching `RETRIEVAL_MAX_DISTANCE`** —
+  usually it's a representation problem (a poorly-extracted table, a scanned PDF, an odd export),
+  not a threshold problem. Loosening the cutoff to paper over bad chunks makes every answer cite
+  marginal sources.
 - **Changing the embedding model** requires re-embedding everything — vectors from two models
   aren't comparable. Each document records which embedder produced it; after a model change,
   documents embedded under the old one are **excluded from search** and flagged

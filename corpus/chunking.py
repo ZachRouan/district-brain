@@ -3,9 +3,17 @@
 Documents split into retrieval-sized chunks along paragraph boundaries where
 possible, with a short overlap seeded from the previous chunk so a fact that
 straddles a boundary is still findable inside a single chunk.
+
+A form feed (FORM_FEED, "\\f") is a HARD chunk boundary: the text on either side
+is chunked independently and never merged across it. Extractors insert it to
+keep atomic units — enriched table rows — from being packed into a neighbour and
+diluted (see corpus/extractors.py). Ordinary documents contain no form feeds, so
+their chunking is byte-for-byte unchanged.
 """
 
 import re
+
+FORM_FEED = "\f"
 
 
 def _normalize_paragraphs(text):
@@ -48,7 +56,18 @@ def _overlap_tail(chunk, overlap, budget):
 
 
 def chunk_text(text, max_chars=1200, overlap=150):
-    """Split `text` into chunks of at most `max_chars` characters."""
+    """Split `text` into chunks of at most `max_chars` characters.
+
+    Form feeds are hard boundaries: each `\\f`-separated segment is chunked on its
+    own, so an enriched table row is never merged into surrounding text. Text with
+    no form feed is a single segment and chunks exactly as before."""
+    chunks = []
+    for segment in text.split(FORM_FEED):
+        chunks.extend(_chunk_segment(segment, max_chars, overlap))
+    return chunks
+
+
+def _chunk_segment(text, max_chars, overlap):
     pieces = []
     for paragraph in _normalize_paragraphs(text):
         if len(paragraph) <= max_chars:

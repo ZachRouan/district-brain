@@ -43,7 +43,7 @@ def ingest_document(document, force=False):
 
     try:
         with document.source_file.open("rb") as f:
-            text = extract_text(f, filename=document.source_file.name)
+            text = extract_text(f, filename=document.source_file.name, title=document.title)
     except Exception as exc:  # extraction failures must surface in admin, not crash
         return _fail(document, f"Could not extract text: {exc}")
 
