@@ -31,7 +31,7 @@ procedures, and board minutes. **No student data is involved at this tier.**
 Prerequisites: Python 3.12+, [uv](https://docs.astral.sh/uv/), Docker with Compose.
 
 ```bash
-git clone <this-repo> && cd district-brain
+git clone https://github.com/ZachRouan/district-brain.git && cd district-brain
 cp .env.example .env            # then set SECRET_KEY (command in the file's comment)
 docker compose up -d            # PostgreSQL + pgvector on localhost:54320
 uv sync                         # install Python dependencies

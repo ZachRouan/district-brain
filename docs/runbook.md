@@ -31,7 +31,7 @@ project stage.
 ## 3. Install
 
 ```bash
-git clone <repo> district-brain && cd district-brain
+git clone https://github.com/ZachRouan/district-brain.git && cd district-brain
 cp .env.example .env
 # Edit .env:
 #   SECRET_KEY  — generate: python -c "import secrets; print(secrets.token_urlsafe(50))"
