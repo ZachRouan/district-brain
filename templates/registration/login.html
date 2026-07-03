@@ -9,6 +9,10 @@
     </div>
     <h1 class="login-hero">Everything your district knows.<br>Only what you're allowed to see.</h1>
     <div class="login-card">
+      {% if google_sso_enabled %}
+        <a class="login-button sso" href="/accounts/google/login/">Continue with district Google account</a>
+        <div class="login-divider">or sign in with a local account</div>
+      {% endif %}
       {% if form.errors %}<p class="login-error">That didn't match — check your username and password.</p>{% endif %}
       <form method="post">
         {% csrf_token %}

@@ -315,6 +315,14 @@ body {
   cursor: pointer;
 }
 .login-help { margin-top: 14px; font-size: 11.5px; color: var(--text-faint); line-height: 1.5; }
+.login-button.sso {
+  display: block; text-align: center; text-decoration: none;
+  line-height: 44px; margin-top: 0; margin-bottom: 4px;
+}
+.login-divider {
+  text-align: center; font-size: 11px; color: var(--text-faint);
+  margin: 12px 0;
+}
 .login-error {
   background: var(--red-bg); color: var(--red);
   border-radius: 6px; padding: 8px 12px;
