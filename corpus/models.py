@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.contrib.postgres.fields import ArrayField
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -126,3 +127,95 @@ class Chunk(models.Model):
 
     def __str__(self):
         return f"{self.document.title} · chunk {self.index}"
+
+
+class CurriculumMetadata(models.Model):
+    """Tier 2 curriculum metadata for a Document (curriculum maps, pacing
+    guides, scope & sequence, unit/lesson plans). One-to-one so Document
+    stays tier-agnostic.
+
+    Access-scoping fields (authorship_level, school_year, sis_teacher_id,
+    sis_section_id) parameterize the Phase 2 retrieval filter; every other
+    field only narrows relevance. Metadata and standard codes are retrieval
+    keys, never access grants — scoping stays in visible_documents().
+    """
+
+    class ArtifactType(models.TextChoices):
+        CURRICULUM_MAP = "curriculum_map", "Curriculum map"
+        SCOPE_AND_SEQUENCE = "scope_and_sequence", "Scope & sequence"
+        PACING_GUIDE = "pacing_guide", "Pacing guide"
+        UNIT_PLAN = "unit_plan", "Unit plan"
+        LESSON_PLAN = "lesson_plan", "Lesson plan"
+
+    class AuthorshipLevel(models.TextChoices):
+        DISTRICT_CONSENSUS = "district_consensus", "District consensus"
+        SCHOOL = "school", "School"
+        INDIVIDUAL_TEACHER = "individual_teacher", "Individual teacher"
+
+    class Subject(models.TextChoices):
+        ELA = "ela", "English Language Arts"
+        MATH = "math", "Mathematics"
+        SCIENCE = "science", "Science"
+        SOCIAL_STUDIES = "social_studies", "Social Studies"
+
+    class DocumentMode(models.TextChoices):
+        PRESCRIBED_PLANNED = "prescribed_planned", "Prescribed / planned"
+        ENACTED_ACTUAL = "enacted_actual", "Enacted / actual"
+
+    class LifecycleStatus(models.TextChoices):
+        LIVING = "living", "Living (continuously revised)"
+        POINT_IN_TIME = "point_in_time", "Point-in-time"
+
+    document = models.OneToOneField(
+        Document, on_delete=models.CASCADE, related_name="curriculum"
+    )
+    # Retrieval / relevance fields ------------------------------------------
+    artifact_types = ArrayField(
+        models.CharField(max_length=32, choices=ArtifactType.choices),
+        default=list,
+        blank=True,
+        help_text="Multi-valued: districts collapse map+pacing+S&S into one file.",
+    )
+    merged_artifact = models.BooleanField(
+        default=False, help_text="True when one file genuinely IS several artifact types."
+    )
+    grades = ArrayField(
+        models.CharField(max_length=8), default=list, blank=True,
+        help_text='Instructional grade(s), e.g. ["K", "1", "2"].',
+    )
+    subject = models.CharField(max_length=32, choices=Subject.choices, blank=True)
+    document_mode = models.CharField(max_length=32, choices=DocumentMode.choices, blank=True)
+    lifecycle_status = models.CharField(max_length=32, choices=LifecycleStatus.choices, blank=True)
+    revision_date = models.DateField(null=True, blank=True)
+    parent_document = models.ForeignKey(
+        Document,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="child_curriculum_docs",
+        help_text="Hierarchy: a lesson's unit, a unit's map.",
+    )
+    field_provenance = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Per-field {source, confidence}; supports coordinator override.",
+    )
+    # Access-scoping fields (consumed by the Phase 2 retrieval filter) -------
+    authorship_level = models.CharField(
+        max_length=32,
+        choices=AuthorshipLevel.choices,
+        blank=True,
+        help_text="The access-decision key: consensus docs are staff-visible; "
+        "teacher-authored plans are section-scoped.",
+    )
+    school_year = models.CharField(
+        max_length=9,
+        blank=True,
+        help_text='e.g. "2025-26". MUST be sourced from the SIS/coordinator, '
+        "never from file timestamps (plans are copied year to year).",
+    )
+    sis_teacher_id = models.CharField(max_length=128, blank=True)
+    sis_section_id = models.CharField(max_length=128, blank=True)
+
+    def __str__(self):
+        return f"Curriculum metadata for {self.document.title}"
