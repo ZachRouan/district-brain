@@ -65,6 +65,10 @@ def test_returned_distances_never_exceed_the_cap(teacher, settings):
     assert all(r.distance <= 0.95 for r in results)
 
 
-def test_non_positive_top_k_still_returns_at_least_one(teacher):
+def test_non_positive_top_k_is_rejected_not_silently_corrected(teacher):
+    """The upper clamp is silent (a huge request is capped, not an error), but a
+    nonsensical top_k <= 0 is a caller bug and should surface as one."""
     make_document_with_chunks(teacher.role, n=3)
-    assert len(retrieve(teacher, QUERY, top_k=0)) == 1
+    for bad in (0, -5):
+        with pytest.raises(ValueError):
+            retrieve(teacher, QUERY, top_k=bad)

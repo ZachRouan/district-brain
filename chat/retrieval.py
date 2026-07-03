@@ -50,10 +50,15 @@ def retrieve(user, query, top_k=None, max_distance=None):
     top_k and max_distance are hard-clamped to the caps in settings: this
     function does not trust its callers. Settings define the defaults; no
     caller — feature code, a tampered request, or a bug — can request more
-    passages, or a looser relevance cutoff, than the caps allow."""
+    passages, or a looser relevance cutoff, than the caps allow. The clamp is
+    one-directional on purpose: an excessive request is capped silently (a
+    buggy top_k=10000 must not crash a user's question), but a nonsensical
+    top_k <= 0 is a caller error and is rejected rather than silently corrected."""
     top_k = top_k if top_k is not None else settings.RETRIEVAL_TOP_K
     max_distance = max_distance if max_distance is not None else settings.RETRIEVAL_MAX_DISTANCE
-    top_k = max(1, min(top_k, settings.RETRIEVAL_TOP_K_CAP))
+    if top_k <= 0:
+        raise ValueError(f"top_k must be a positive integer, got {top_k!r}")
+    top_k = min(top_k, settings.RETRIEVAL_TOP_K_CAP)
     max_distance = min(max_distance, settings.RETRIEVAL_MAX_DISTANCE_CAP)
 
     scope = visible_documents(user)
