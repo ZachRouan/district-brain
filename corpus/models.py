@@ -11,12 +11,12 @@ class Document(models.Model):
     """One ingested source document and its corpus metadata.
 
     ENABLED_TIERS is the tier-discipline guardrail: this build refuses to hold
-    anything above Tier 1 (no student data), even as test fixtures.
+    anything above Tier 2 (never Tier 3 student records), even as test fixtures.
     """
 
     class Tier(models.IntegerChoices):
         TIER_1 = 1, "Tier 1 — policies, handbooks, schedules (no student data)"
-        TIER_2 = 2, "Tier 2 — curriculum & lesson plans (not enabled)"
+        TIER_2 = 2, "Tier 2 — curriculum & lesson plans"
         TIER_3 = 3, "Tier 3 — student records (not enabled)"
 
     ENABLED_TIERS = (Tier.TIER_1, Tier.TIER_2)
@@ -79,8 +79,8 @@ class Document(models.Model):
         if self.tier not in self.ENABLED_TIERS:
             raise ValidationError(
                 {
-                    "tier": "Only Tier 1 (no student data) is enabled in this build. "
-                    "Tier 2/3 require board approval and a proven audit trail first."
+                    "tier": "Only Tier 1 and Tier 2 are enabled in this build. "
+                    "Tier 3 (student records) requires board approval and a proven audit trail first."
                 }
             )
 
