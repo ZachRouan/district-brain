@@ -72,3 +72,13 @@ def test_non_positive_top_k_is_rejected_not_silently_corrected(teacher):
     for bad in (0, -5):
         with pytest.raises(ValueError):
             retrieve(teacher, QUERY, top_k=bad)
+
+
+def test_negative_max_distance_is_rejected(teacher):
+    """Cosine distance is never < 0, so a negative cutoff is nonsense input, not
+    an over-request: reject loudly rather than clamp. (max_distance=0 is valid —
+    exact-match-only — and is left alone.)"""
+    make_document_with_chunks(teacher.role, n=3)
+    with pytest.raises(ValueError):
+        retrieve(teacher, QUERY, max_distance=-0.5)
+    assert retrieve(teacher, QUERY, max_distance=0) == []  # valid, just matches nothing
