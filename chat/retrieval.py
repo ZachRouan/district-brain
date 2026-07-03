@@ -41,9 +41,16 @@ def retrieve(user, query, top_k=None, max_distance=None):
     """Return the best-matching chunks for `query`, drawn exclusively from
     documents visible to `user`, nearest first. Chunks farther than
     `max_distance` are dropped — an empty result means "I don't have that",
-    which callers must prefer over guessing."""
+    which callers must prefer over guessing.
+
+    top_k and max_distance are hard-clamped to the caps in settings: this
+    function does not trust its callers. Settings define the defaults; no
+    caller — feature code, a tampered request, or a bug — can request more
+    passages, or a looser relevance cutoff, than the caps allow."""
     top_k = top_k if top_k is not None else settings.RETRIEVAL_TOP_K
     max_distance = max_distance if max_distance is not None else settings.RETRIEVAL_MAX_DISTANCE
+    top_k = max(1, min(top_k, settings.RETRIEVAL_TOP_K_CAP))
+    max_distance = min(max_distance, settings.RETRIEVAL_MAX_DISTANCE_CAP)
 
     scope = visible_documents(user)
     if not scope.exists():

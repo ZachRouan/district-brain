@@ -133,6 +133,16 @@ LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
 RETRIEVAL_TOP_K = int(os.environ.get("RETRIEVAL_TOP_K", "6"))
 RETRIEVAL_MAX_DISTANCE = float(os.environ.get("RETRIEVAL_MAX_DISTANCE", "0.60"))
 
+# Hard caps that retrieve() enforces on its own arguments, so no caller — a
+# future feature, a tampered request, a bug — can widen a search beyond what a
+# grounded, auditable answer should ever draw on. These bound the *ceiling*;
+# the defaults above set normal operating behaviour well under them.
+#  - TOP_K_CAP: an answer citing more than this many passages is noise, not grounding.
+#  - MAX_DISTANCE_CAP: cosine distance 1.0 == orthogonal (zero similarity); nothing
+#    past it is ever "relevant", so it is the strictest defensible upper bound.
+RETRIEVAL_TOP_K_CAP = int(os.environ.get("RETRIEVAL_TOP_K_CAP", "20"))
+RETRIEVAL_MAX_DISTANCE_CAP = float(os.environ.get("RETRIEVAL_MAX_DISTANCE_CAP", "1.0"))
+
 # ---------------------------------------------------------------------------
 # Optional Google Workspace SSO (django-allauth), disabled by default.
 # Local accounts always work; see docs/runbook.md to enable SSO.
