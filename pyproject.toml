@@ -1,0 +1,42 @@
+[project]
+name = "district-brain"
+version = "0.1.0"
+description = "Locally hosted, role-scoped RAG over a school district's knowledge corpus. Tier 1: staff-facing chat over policies, handbooks, and schedules."
+readme = "README.md"
+requires-python = ">=3.12,<3.14"
+license = { text = "MIT" }
+dependencies = [
+    "django>=5.2,<6.0",
+    "psycopg[binary]>=3.2",
+    "pgvector>=0.3.6",
+    "python-dotenv>=1.0",
+    "sentence-transformers>=3.3",
+    "pypdf>=5.1",
+    "python-docx>=1.1",
+    "beautifulsoup4>=4.12",
+    "django-allauth[socialaccount]>=65.0",
+    "requests>=2.32",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-django>=4.9",
+]
+
+[tool.uv]
+# Embeddings run fine on CPU; the CPU wheel keeps installs ~2 GB smaller than CUDA.
+# A GPU is only relevant for the (separate) LLM serving layer, not this app.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[tool.pytest.ini_options]
+DJANGO_SETTINGS_MODULE = "districtbrain.settings"
+python_files = ["test_*.py"]
+testpaths = ["tests"]
+addopts = "--ds=districtbrain.settings -p no:cacheprovider"

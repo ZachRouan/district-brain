@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Django
+db.sqlite3
+/media/
+/staticfiles/
+
+# Environment / secrets — never commit real credentials
+.env
+
+# Local tooling and private planning docs (not part of the public repo)
+PROJECT.md
+District Brain pitch deck/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
