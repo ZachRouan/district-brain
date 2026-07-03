@@ -93,6 +93,20 @@ def test_users_cannot_open_each_others_conversations(client, teacher, handbook):
     assert response.status_code == 404
 
 
+def test_scope_card_links_to_downloadable_originals(client, teacher):
+    """A document with a stored source file is a download link in the scope card,
+    pointing at the authenticated per-user download view (never /media/)."""
+    from django.core.files.base import ContentFile
+
+    doc = Document.objects.create(title="Downloadable handbook", tier=1, status=Document.Status.READY)
+    doc.allowed_roles.set([teacher.role])
+    doc.source_file.save("handbook.pdf", ContentFile(b"bytes"), save=True)
+    client.login(username="alvarez", password="pw")
+    html = client.get(reverse("chat:home")).content.decode()
+    assert reverse("chat:document_download", args=[doc.pk]) in html
+    assert "/media/" not in html  # originals are never linked via a public media path
+
+
 def test_posting_to_another_users_conversation_404s_and_writes_nothing(client, teacher, handbook):
     """IDOR guard on the write path: naming someone else's conversation id in the
     POST must 404 (get_object_or_404 filters user=request.user) and must not

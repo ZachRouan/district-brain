@@ -151,6 +151,8 @@ body {
 }
 .scope-card .eyebrow { padding: 0 0 6px; }
 .scope-text { font-size: 11.5px; line-height: 1.55; color: var(--text-body); }
+.scope-text a.scope-doc { color: var(--text-body); text-decoration: none; border-bottom: 1px dotted var(--border-faint); }
+.scope-text a.scope-doc:hover { color: var(--accent, var(--text-body)); border-bottom-color: currentColor; }
 .scope-note { font-size: 11px; color: var(--text-faint); margin-top: 6px; }
 
 .onprem-footer {
@@ -238,6 +240,8 @@ body {
   font-size: 11px; color: var(--text-faint);
   background: var(--card);
 }
+.citation-provenance a { color: inherit; text-decoration: underline; }
+.citation-provenance a:hover { color: var(--accent, var(--text-body)); }
 
 .answer-footer { display: flex; align-items: center; }
 .audit-stamp {

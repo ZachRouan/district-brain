@@ -18,9 +18,9 @@
       <div class="eyebrow">What you can see</div>
       {% if user.role %}
         <p class="scope-text">
-          {% for d in visible_docs %}{{ d.title }}{% if not forloop.last %} · {% endif %}{% empty %}No documents are scoped to your role yet.{% endfor %}
+          {% for d in visible_docs %}{% if d.source_file %}<a class="scope-doc" href="{% url 'chat:document_download' d.pk %}">{{ d.title }}</a>{% else %}{{ d.title }}{% endif %}{% if not forloop.last %} · {% endif %}{% empty %}No documents are scoped to your role yet.{% endfor %}
         </p>
-        <p class="scope-note">Set by district policy.</p>
+        <p class="scope-note">Set by district policy. Titles link to the original file.</p>
       {% else %}
         <p class="scope-text">No role assigned yet — ask your District Brain administrator to assign one. Until then, questions return no sources.</p>
       {% endif %}
@@ -57,7 +57,7 @@
                               {% if cite.document_last_updated %}<span class="citation-meta">· last updated {{ cite.document_last_updated }}</span>{% endif %}
                             </div>
                             <div class="citation-passage">{{ cite.chunk_text }}</div>
-                            <div class="citation-provenance">Exact passage the answer was drawn from.</div>
+                            <div class="citation-provenance">Exact passage the answer was drawn from.{% if cite.chunk and cite.chunk.document.source_file %} · <a href="{% url 'chat:document_download' cite.chunk.document_id %}">Download original</a>{% endif %}</div>
                           </div>
                         </details>
                       {% endfor %}

@@ -150,6 +150,58 @@ uv run gunicorn districtbrain.wsgi -b 0.0.0.0:8800 --workers 2
 - HTTPS on the LAN: front with Caddy using an internal CA, or terminate at your existing
   reverse proxy. Set `DEBUG=false` and a real `SECRET_KEY` — both are in `.env`.
 
+### ⛔ NEVER expose `/media/` in your reverse proxy
+
+This is the single most dangerous misconfiguration you can make, and nearly every
+generic Django + nginx/Caddy guide tells you to do it. **Do not.**
+
+`media/` holds the **original source files** of every document — full text, all roles.
+The app enforces who-can-see-what in *retrieval*, but a file served straight off disk at
+a public URL skips that check entirely: anyone who can guess or is handed a URL like
+`https://your-server/media/corpus/2026/iep-draft.pdf` gets the file with **no login and
+no role check**. That is a FERPA-grade leak and a one-way door (see PROJECT.md risk #2).
+
+District Brain serves originals only through the authenticated, per-user-scoped
+`/documents/<id>/download/` view. Your reverse proxy must serve **`/static/` only** and
+must **not** have any `location /media/` block.
+
+**nginx — correct:**
+```nginx
+server {
+    listen 443 ssl;
+    server_name districtbrain.your-district.internal;
+
+    location /static/ {            # stylesheets, JS — safe to serve directly
+        alias /srv/district-brain/staticfiles/;
+    }
+
+    # NO `location /media/` block. Do not add one.
+
+    location / {                   # everything else, including /documents/<id>/download/,
+        proxy_pass http://127.0.0.1:8800;   # goes through the app so scoping is enforced
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+
+**Caddy — correct:**
+```caddy
+districtbrain.your-district.internal {
+    handle_path /static/* {
+        root * /srv/district-brain/staticfiles
+        file_server
+    }
+    # NO handler for /media/*. Do not add one.
+    reverse_proxy 127.0.0.1:8800   # /documents/<id>/download/ is scoped by the app
+}
+```
+
+If you later see `location /media/ { alias .../media/; }` in a teammate's config or a
+tutorial, delete it. There is a test (`tests/test_media_not_served.py`) that fails if the
+app itself ever regresses and starts serving media directly.
+
 ## 10. Verifying the security invariants
 
 ```bash

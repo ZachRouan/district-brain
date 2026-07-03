@@ -1,6 +1,11 @@
+import os
+
 from django.contrib.auth.decorators import login_required
+from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
+
+from corpus.models import Document
 
 from .models import Conversation
 from .retrieval import visible_documents
@@ -47,3 +52,32 @@ def ask_view(request):
 
     ask(request.user, conversation, question)
     return redirect("chat:conversation", pk=conversation.pk)
+
+
+@login_required
+def document_download(request, pk):
+    """Stream a document's original source file — but ONLY if the requesting user
+    is entitled to it under the same retrieval scope that governs answers.
+
+    This is the ONLY sanctioned way to fetch an original file. MEDIA_ROOT is
+    never served directly (see districtbrain/urls.py), because a public /media/
+    location would let anyone fetch any PDF by URL, bypassing role scoping — the
+    one thing the product must never allow.
+
+    Out-of-scope (or nonexistent) documents 404, not 403, so a user cannot even
+    learn that a document they can't see exists. Superusers (console operators)
+    may download anything for corpus management.
+    """
+    if request.user.is_superuser:
+        document = get_object_or_404(Document, pk=pk)
+    else:
+        document = get_object_or_404(visible_documents(request.user), pk=pk)
+
+    if not document.source_file:
+        raise Http404("This document has no stored source file.")
+
+    return FileResponse(
+        document.source_file.open("rb"),
+        as_attachment=True,
+        filename=os.path.basename(document.source_file.name),
+    )
