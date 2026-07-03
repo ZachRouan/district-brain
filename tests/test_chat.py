@@ -7,13 +7,15 @@ these tests a transcript of exactly what any model would have been shown.
 import datetime
 
 import pytest
+import requests
 from django.contrib.auth import get_user_model
 
 from accounts.models import Role
+from audit.models import AuditLog
 from chat.llm import LlamaCppServerBackend, MockLLMBackend, get_llm_backend
 from chat.models import Conversation
 from chat.retrieval import retrieve
-from chat.services import NO_SOURCES_ANSWER, ask, strip_hallucinated_citations
+from chat.services import NO_SOURCES_ANSWER, UNREACHABLE_ANSWER, ask, strip_hallucinated_citations
 from corpus.embeddings import get_embedder
 from corpus.models import Chunk, Document
 
@@ -173,6 +175,42 @@ def test_llamacpp_backend_calls_local_server(monkeypatch, teacher, handbook, set
     answer = backend.generate("When is a confiscated phone returned?", results)
     assert answer == "The phone is returned after school. [1]"
     assert captured["url"] == "http://127.0.0.1:9999/v1/chat/completions"
+    assert captured["json"]["max_tokens"] == settings.LLM_MAX_TOKENS  # generation is bounded
     sent = str(captured["json"])
     assert "returned at the end of the school day" in sent  # context reached the model
     assert "[1]" in sent  # sources are numbered for citation
+
+
+@pytest.mark.parametrize("failure", [requests.ConnectionError, requests.Timeout])
+def test_unreachable_engine_raises_typed_unavailable(monkeypatch, teacher, handbook, settings, failure):
+    from chat.llm import LLMBackendUnavailable
+
+    def boom(url, json=None, timeout=None):
+        raise failure("engine down")
+
+    monkeypatch.setattr("chat.llm.requests.post", boom)
+    settings.LLAMA_SERVER_URL = "http://127.0.0.1:9999"
+    results = retrieve(teacher, "confiscated phone")
+    with pytest.raises(LLMBackendUnavailable):
+        LlamaCppServerBackend().generate("When is a confiscated phone returned?", results)
+
+
+def test_ask_gives_friendly_notice_and_audits_when_engine_is_down(monkeypatch, teacher, handbook, settings):
+    """A crashed llama-server must not 500. The user gets a plain notice; the
+    failure is audited as a refusal with the reason and the passages we fetched."""
+    settings.LLM_BACKEND = "chat.llm.LlamaCppServerBackend"
+
+    def boom(url, json=None, timeout=None):
+        raise requests.ConnectionError("connection refused")
+
+    monkeypatch.setattr("chat.llm.requests.post", boom)
+    conversation = Conversation.objects.create(user=teacher)
+    message = ask(teacher, conversation, "When is a confiscated phone returned?")
+
+    assert message.content == UNREACHABLE_ANSWER
+    assert message.citations.count() == 0  # no citations on a non-answer
+    log = AuditLog.objects.get()
+    assert log.refused is True
+    assert "unavailable" in log.error.lower()
+    assert log.answer == UNREACHABLE_ANSWER
+    assert len(log.retrieved) == 1  # forensics: what we fetched but couldn't answer from

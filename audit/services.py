@@ -1,9 +1,15 @@
 from .models import AuditLog
 
 
-def record_chat(user, conversation, question, answer_text, retrieved):
+def record_chat(user, conversation, question, answer_text, retrieved, *, refused=None, error=""):
     """Write the audit row for one exchange. Called inside the same database
-    transaction that saves the answer: neither exists without the other."""
+    transaction that saves the answer: neither exists without the other.
+
+    `refused` defaults to "retrieval was too thin" (no passages); callers pass
+    it explicitly when an answer was withheld for another reason — e.g. the
+    answer engine was unreachable — alongside an `error` note."""
+    if refused is None:
+        refused = not retrieved
     return AuditLog.objects.create(
         event=AuditLog.Event.CHAT,
         user=user,
@@ -12,7 +18,8 @@ def record_chat(user, conversation, question, answer_text, retrieved):
         conversation=conversation,
         question=question,
         answer=answer_text,
-        refused=not retrieved,
+        refused=refused,
+        error=error,
         retrieved=[
             {
                 "rank": n,

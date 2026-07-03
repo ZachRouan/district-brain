@@ -13,6 +13,11 @@ import requests
 from django.conf import settings
 from django.utils.module_loading import import_string
 
+
+class LLMBackendUnavailable(Exception):
+    """The answer engine could not be reached or timed out. ask() turns this
+    into a friendly notice for the user and an audited failure — never a 500."""
+
 SYSTEM_PROMPT = """\
 You are District Brain, the internal assistant for {district}. Answer the \
 staff member's question using ONLY the numbered source passages provided. \
@@ -63,11 +68,20 @@ class LlamaCppServerBackend:
         ]
 
     def generate(self, question, retrieved):
-        response = requests.post(
-            f"{self.base_url}/v1/chat/completions",
-            json={"messages": self.build_messages(question, retrieved), "temperature": 0.2},
-            timeout=self.timeout,
-        )
+        try:
+            response = requests.post(
+                f"{self.base_url}/v1/chat/completions",
+                json={
+                    "messages": self.build_messages(question, retrieved),
+                    "temperature": 0.2,
+                    "max_tokens": settings.LLM_MAX_TOKENS,
+                },
+                timeout=self.timeout,
+            )
+        except (requests.ConnectionError, requests.Timeout) as exc:
+            # A closet box, a crashed llama-server, a wrong URL: don't 500. Signal
+            # unavailability so ask() can answer gracefully and audit the failure.
+            raise LLMBackendUnavailable(f"{self.base_url}: {exc}") from exc
         response.raise_for_status()
         return response.json()["choices"][0]["message"]["content"].strip()
 

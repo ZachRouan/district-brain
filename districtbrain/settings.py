@@ -126,6 +126,9 @@ EMBEDDING_DIM = 384
 # model is this one setting.
 LLM_BACKEND = os.environ.get("LLM_BACKEND", "chat.llm.MockLLMBackend")
 LLAMA_SERVER_URL = os.environ.get("LLAMA_SERVER_URL", "http://127.0.0.1:8080")
+# Upper bound on generated tokens per answer. Bounds latency and cost on a
+# closet-grade box and stops a runaway generation; answers are short by design.
+LLM_MAX_TOKENS = int(os.environ.get("LLM_MAX_TOKENS", "1024"))
 
 # Retrieval tuning. MAX_DISTANCE is cosine distance (0 = identical); anything
 # farther than the cutoff is treated as "no relevant sources" and the assistant

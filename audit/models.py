@@ -27,7 +27,16 @@ class AuditLog(models.Model):
         default=list,
         help_text="Every chunk shown to the model: document, rank, distance, and the exact passage text.",
     )
-    refused = models.BooleanField(default=False, help_text="True when retrieval was too thin to answer.")
+    refused = models.BooleanField(
+        default=False,
+        help_text="True when no grounded answer was delivered — retrieval was too thin, "
+        "or the answer engine failed (see error).",
+    )
+    error = models.TextField(
+        blank=True,
+        help_text="Set when the answer engine could not be reached or failed; the user got a "
+        "friendly notice instead of an answer. Blank on normal exchanges.",
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
