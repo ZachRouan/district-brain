@@ -73,6 +73,11 @@ idempotent (re-ingesting unchanged content is a no-op).
 (a document with no roles is invisible to everyone). Status shows Ready or an error
 message on the same page.
 
+> **Large documents:** admin upload extracts, chunks, and embeds *synchronously* — a very
+> large PDF can exceed the request timeout and appear to hang. For big files (or any bulk
+> load), use the CLI below (`manage.py ingest`) instead; it runs outside the web request
+> and reports progress per file.
+
 **CLI (bulk):**
 ```bash
 uv run python manage.py ingest /path/to/folder --roles admin,teacher,staff
@@ -224,8 +229,18 @@ scope, so the model never saw it. Check the audit row to confirm what was retrie
 - `RETRIEVAL_MAX_DISTANCE` (default 0.60): cosine-distance cutoff, calibrated for
   all-MiniLM-L6-v2. With the seeded corpus, clearly relevant chunks score ~0.30–0.59 and
   irrelevant ones 0.64+. Raise it if the assistant refuses too often; lower it if answers
-  cite marginal sources. Changing the **embedding model** requires re-ingesting everything:
-  `uv run python manage.py ingest <paths> --roles … --force`.
+  cite marginal sources.
+- `RETRIEVAL_TOP_K_CAP` (default 20) and `RETRIEVAL_MAX_DISTANCE_CAP` (default 1.0) are hard
+  ceilings `retrieve()` enforces on its own arguments; the defaults above operate well under
+  them. You shouldn't need to touch the caps.
+- **Changing the embedding model** requires re-embedding everything — vectors from two models
+  aren't comparable. Each document records which embedder produced it; after a model change,
+  documents embedded under the old one are **excluded from search** and flagged
+  `⚠ STALE — not searchable` in the admin document list. Find and repair them with:
+  ```bash
+  uv run python manage.py check_embeddings         # report what's stale
+  uv run python manage.py check_embeddings --fix    # re-ingest with the active embedder
+  ```
 
 ## 12. Troubleshooting
 
