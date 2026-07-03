@@ -13,7 +13,7 @@ from accounts.models import Role
 from chat.llm import LlamaCppServerBackend, MockLLMBackend, get_llm_backend
 from chat.models import Conversation
 from chat.retrieval import retrieve
-from chat.services import NO_SOURCES_ANSWER, ask
+from chat.services import NO_SOURCES_ANSWER, ask, strip_hallucinated_citations
 from corpus.embeddings import get_embedder
 from corpus.models import Chunk, Document
 
@@ -114,6 +114,38 @@ def test_ask_never_surfaces_out_of_scope_content(teacher, handbook):
     message = ask(teacher, conversation, "When is a confiscated phone returned?")
     assert "SYSTEM OVERRIDE" not in message.content
     assert all("SYSTEM OVERRIDE" not in c.chunk_text for c in message.citations.all())
+
+
+def test_strip_hallucinated_citations_drops_out_of_range_markers():
+    assert strip_hallucinated_citations("[1] valid [7] hallucinated", 2) == "[1] valid hallucinated"
+    assert strip_hallucinated_citations("cited [2] and [0] and [3]", 2) == "cited [2] and and"
+    assert strip_hallucinated_citations("[1] only", 1) == "[1] only"
+
+
+def test_ask_strips_citation_markers_with_no_matching_source(teacher, monkeypatch):
+    """A model can invent a [7] that points at a source that was never retrieved.
+    ask() must drop it so the UI never renders a fabricated, unverifiable citation."""
+    two_chunk_doc = make_document(
+        "Two-passage policy",
+        [
+            "A phone confiscated in class is logged with the office.",
+            "The phone is returned to the student at the end of the day.",
+        ],
+        [teacher.role],
+    )
+    assert two_chunk_doc.chunks.count() == 2
+
+    class HallucinatingBackend:
+        def generate(self, question, retrieved):
+            assert len(retrieved) == 2
+            return "The phone is logged [1] and returned after school [7]."
+
+    monkeypatch.setattr("chat.services.get_llm_backend", lambda: HallucinatingBackend())
+    conversation = Conversation.objects.create(user=teacher)
+    message = ask(teacher, conversation, "What happens to a confiscated phone?")
+    assert "[7]" not in message.content
+    assert "[1]" in message.content
+    assert message.content == "The phone is logged [1] and returned after school."
 
 
 def test_llamacpp_backend_calls_local_server(monkeypatch, teacher, handbook, settings):
