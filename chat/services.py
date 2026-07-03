@@ -10,6 +10,8 @@ Thin retrieval short-circuits to a refusal: no sources, no synthesis.
 
 from django.db import transaction
 
+from audit.services import record_chat
+
 from .llm import get_llm_backend
 from .models import Citation, Message
 from .retrieval import retrieve
@@ -50,5 +52,6 @@ def ask(user, conversation, question):
         if not conversation.title:
             conversation.title = question[:200]
         conversation.save()  # also bumps updated_at for sidebar ordering
+        record_chat(user, conversation, question, answer_text, retrieved)
 
     return answer
