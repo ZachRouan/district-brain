@@ -7,7 +7,16 @@ from .models import Chunk, Document
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
     actions = ["reingest"]
-    list_display = ("title", "tier", "status", "last_updated", "role_list", "chunk_count", "ingested_at")
+    list_display = (
+        "title",
+        "tier",
+        "status",
+        "last_updated",
+        "role_list",
+        "chunk_count",
+        "embedding_stale",
+        "ingested_at",
+    )
     list_filter = ("status", "tier", "allowed_roles")
     search_fields = ("title", "source_name")
     filter_horizontal = ("allowed_roles",)
@@ -32,6 +41,13 @@ class DocumentAdmin(admin.ModelAdmin):
     @admin.display(description="Chunks")
     def chunk_count(self, obj):
         return obj.chunks.count()
+
+    @admin.display(description="Embedding stale")
+    def embedding_stale(self, obj):
+        """Empty when this document's embeddings match the active embedder;
+        a loud warning when a model/backend mismatch has excluded it from
+        retrieval — re-ingest it (`manage.py check_embeddings --fix`)."""
+        return "⚠ STALE — not searchable" if obj.is_embedding_stale() else ""
 
     def save_related(self, request, form, formsets, change):
         """Ingest right after save (and after roles are attached), so an

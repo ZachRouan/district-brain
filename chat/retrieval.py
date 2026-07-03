@@ -10,13 +10,17 @@ reach the model, no matter what any document's text says.
 Covered by tests/test_retrieval_scoping.py — keep those passing.
 """
 
+import logging
 from dataclasses import dataclass
 
 from django.conf import settings
+from django.db.models import Q
 from pgvector.django import CosineDistance
 
 from corpus.embeddings import get_embedder
 from corpus.models import Chunk, Document
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -56,9 +60,35 @@ def retrieve(user, query, top_k=None, max_distance=None):
     if not scope.exists():
         return []
 
-    query_vector = get_embedder().embed_query(query)
+    embedder = get_embedder()
+
+    # Only search documents embedded with the *active* embedder. Vectors from
+    # two different models (or dimensions) are not comparable, so a silent model
+    # swap would corrupt similarity scoring. Documents embedded under a different
+    # backend/model/dimension are excluded until re-ingested; documents with no
+    # provenance recorded (legacy/pre-tracking) are treated as compatible.
+    current = Q(
+        embedding_backend=embedder.backend,
+        embedding_model=embedder.model_name,
+        embedding_dim=embedder.dimensions,
+    )
+    legacy = Q(embedding_backend="", embedding_dim__isnull=True)
+    searchable = scope.filter(current | legacy)
+
+    stale = scope.exclude(current | legacy)
+    if stale.exists():
+        logger.warning(
+            "Excluding %d document(s) from retrieval: embedded with a different backend/model than "
+            "the active embedder (%s / %s / %s). Run `manage.py check_embeddings --fix`.",
+            stale.count(),
+            embedder.backend,
+            embedder.model_name,
+            embedder.dimensions,
+        )
+
+    query_vector = embedder.embed_query(query)
     chunks = (
-        Chunk.objects.filter(document__in=scope.values("id"))
+        Chunk.objects.filter(document__in=searchable.values("id"))
         .annotate(distance=CosineDistance("embedding", query_vector))
         .filter(distance__lte=max_distance)
         .order_by("distance")

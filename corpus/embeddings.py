@@ -18,6 +18,9 @@ class HashEmbedder:
     buckets, L2-normalized. Texts sharing vocabulary get nearby vectors, which
     is all retrieval tests need — and it is a pure function of the text."""
 
+    backend = "hash"
+    model_name = ""  # no model file; the algorithm is the identity
+
     def __init__(self, dimensions=None):
         self.dimensions = dimensions or settings.EMBEDDING_DIM
 
@@ -47,8 +50,13 @@ class SentenceTransformerEmbedder:
     """Local sentence-transformers model. Loaded lazily so importing this
     module (e.g. in tests or management commands) never touches the model."""
 
+    backend = "sentence_transformers"
+
     def __init__(self, model_name=None):
         self.model_name = model_name or settings.EMBEDDING_MODEL
+        # The deployment guarantees the model's output width equals EMBEDDING_DIM
+        # (the VectorField column width); reading it here would force a model load.
+        self.dimensions = settings.EMBEDDING_DIM
         self._model = None
 
     @property

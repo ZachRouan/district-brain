@@ -45,6 +45,14 @@ class Document(models.Model):
         help_text="Only these roles can ever retrieve this document. No roles = nobody.",
     )
     content_hash = models.CharField(max_length=64, blank=True, editable=False)
+    # Embedding provenance, stamped at ingest. Retrieval excludes any document
+    # whose chunks were embedded with a backend/model/dimension different from
+    # the active embedder — otherwise a model swap silently corrupts similarity
+    # (vectors from two models are not comparable). check_embeddings surfaces and
+    # re-ingests the mismatches.
+    embedding_backend = models.CharField(max_length=50, blank=True, editable=False)
+    embedding_model = models.CharField(max_length=255, blank=True, editable=False)
+    embedding_dim = models.PositiveIntegerField(null=True, blank=True, editable=False)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     error_message = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -72,6 +80,27 @@ class Document(models.Model):
                     "Tier 2/3 require board approval and a proven audit trail first."
                 }
             )
+
+    def embedding_identity(self):
+        return (self.embedding_backend, self.embedding_model, self.embedding_dim)
+
+    def has_embedding_provenance(self):
+        """False for a document ingested before provenance was tracked (or via a
+        raw ORM path in tests). Such documents are treated as legacy-compatible
+        by retrieval, but check_embeddings flags them for a confirming re-ingest."""
+        return bool(self.embedding_backend) or self.embedding_dim is not None
+
+    def is_embedding_stale(self):
+        """True when this document's chunks were embedded with a different
+        backend/model/dimension than the active embedder — so retrieval excludes
+        it until it is re-ingested. Legacy documents with no provenance recorded
+        return False (assumed compatible)."""
+        from corpus.embeddings import get_embedder
+
+        if not self.has_embedding_provenance():
+            return False
+        embedder = get_embedder()
+        return self.embedding_identity() != (embedder.backend, embedder.model_name, embedder.dimensions)
 
 
 class Chunk(models.Model):
