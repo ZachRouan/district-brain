@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from pgvector.django import VectorField
 
 from accounts.models import Role
@@ -51,6 +52,14 @@ class Document(models.Model):
 
     class Meta:
         ordering = ["title"]
+        constraints = [
+            # The tier discipline made physical: the database itself refuses to
+            # store anything above Tier 1 in this build, so no code path — a raw
+            # ORM save, a bulk import, a future bug — can slip student-data-tier
+            # rows in behind the clean() validation. Keep this in lockstep with
+            # ENABLED_TIERS; widening the corpus is a deliberate, migrated change.
+            models.CheckConstraint(condition=Q(tier=1), name="document_tier_1_only"),
+        ]
 
     def __str__(self):
         return self.title

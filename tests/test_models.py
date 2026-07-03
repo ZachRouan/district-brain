@@ -38,6 +38,15 @@ def test_document_rejects_tiers_above_one():
             doc.full_clean()
 
 
+def test_database_refuses_a_direct_tier_two_save():
+    """clean() guards the admin path, but a raw ORM save bypasses validation.
+    The CheckConstraint makes the tier discipline physical: the database itself
+    rejects a Tier 2 row, so no code path can slip student-data-tier documents in.
+    """
+    with pytest.raises(IntegrityError):
+        Document.objects.create(title="Sneaky Tier 2", tier=2)
+
+
 def test_document_defaults_to_tier_one_and_pending_status():
     doc = Document.objects.create(title="Bell schedule")
     assert doc.tier == 1
