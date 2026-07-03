@@ -11,3 +11,9 @@ def _deterministic_embeddings(settings):
     """
     settings.EMBEDDING_BACKEND = "hash"
     settings.RETRIEVAL_MAX_DISTANCE = 0.95
+
+
+@pytest.fixture(autouse=True)
+def _isolated_media(settings, tmp_path):
+    """Uploaded files land in a per-test directory, never in the repo."""
+    settings.MEDIA_ROOT = tmp_path / "media"

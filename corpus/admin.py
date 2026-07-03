@@ -1,10 +1,12 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 
+from .ingest import ingest_document
 from .models import Chunk, Document
 
 
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
+    actions = ["reingest"]
     list_display = ("title", "tier", "status", "last_updated", "role_list", "chunk_count", "ingested_at")
     list_filter = ("status", "tier", "allowed_roles")
     search_fields = ("title", "source_name")
@@ -30,6 +32,27 @@ class DocumentAdmin(admin.ModelAdmin):
     @admin.display(description="Chunks")
     def chunk_count(self, obj):
         return obj.chunks.count()
+
+    def save_related(self, request, form, formsets, change):
+        """Ingest right after save (and after roles are attached), so an
+        uploaded document is searchable the moment the admin page confirms."""
+        super().save_related(request, form, formsets, change)
+        document = form.instance
+        if not document.source_file:
+            return
+        result = ingest_document(document)
+        if result.outcome == "error":
+            messages.error(request, f"Ingestion failed: {result.message}")
+        elif result.outcome == "ingested":
+            messages.success(request, f"Ingested {result.chunk_count} chunks from “{document.title}”.")
+
+    @admin.action(description="Re-ingest selected documents")
+    def reingest(self, request, queryset):
+        for document in queryset:
+            result = ingest_document(document, force=True)
+            level = messages.SUCCESS if result.outcome != "error" else messages.ERROR
+            detail = f"{result.chunk_count} chunks" if result.outcome != "error" else result.message
+            messages.add_message(request, level, f"{document.title}: {result.outcome} ({detail})")
 
 
 @admin.register(Chunk)
