@@ -17,6 +17,7 @@ def test_curriculum_metadata_attaches_to_a_tier_2_document():
         lifecycle_status=CurriculumMetadata.LifecycleStatus.LIVING,
         field_provenance={"subject": {"source": "folder_path", "confidence": 0.9}},
     )
+    meta.refresh_from_db()
     assert doc.curriculum == meta
     assert meta.artifact_types == ["pacing_guide"]
     assert meta.subject == "math"
@@ -26,6 +27,7 @@ def test_curriculum_metadata_attaches_to_a_tier_2_document():
 def test_curriculum_metadata_defaults_are_empty_not_null():
     doc = Document.objects.create(title="Bare metadata", tier=2)
     meta = CurriculumMetadata.objects.create(document=doc)
+    meta.refresh_from_db()
     assert meta.artifact_types == []
     assert meta.grades == []
     assert meta.merged_artifact is False
