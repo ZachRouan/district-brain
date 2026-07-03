@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Sign in{% endblock %}
+{% block body %}
+<div class="login-page">
+  <div class="login-column">
+    <div class="login-brand">
+      <span class="logo-tile large">DB</span>
+      <span class="wordmark large">District Brain</span>
+    </div>
+    <h1 class="login-hero">Everything your district knows.<br>Only what you're allowed to see.</h1>
+    <div class="login-card">
+      {% if form.errors %}<p class="login-error">That didn't match — check your username and password.</p>{% endif %}
+      <form method="post">
+        {% csrf_token %}
+        <label class="login-label" for="id_username">Username</label>
+        <input class="login-input" type="text" name="username" id="id_username" autofocus autocapitalize="none" required>
+        <label class="login-label" for="id_password">Password</label>
+        <input class="login-input" type="password" name="password" id="id_password" required>
+        <input type="hidden" name="next" value="{{ next }}">
+        <button class="login-button" type="submit">Sign in</button>
+      </form>
+      <p class="login-help">Your role and permissions are assigned by the district. There is nothing to configure here.</p>
+    </div>
+  </div>
+  <footer class="trust-bar">
+    <span><span class="dot"></span>SERVER: {{ server_label }}</span>
+    <span>NO CLOUD AI IN PATH — DATA STAYS ON THE DISTRICT NETWORK</span>
+    <span>MODELS: LOCAL</span>
+  </footer>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% load static %}<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}District Brain{% endblock %} · {{ district_name }}</title>
+  <link rel="stylesheet" href="{% static 'css/app.css' %}">
+</head>
+<body>
+{% if user.is_authenticated %}
+<header class="topbar">
+  <span class="logo-tile">DB</span>
+  <span class="wordmark">District Brain</span>
+  <span class="district-name">{{ district_name }}</span>
+  {% if user.is_staff %}<nav class="mode-tabs">
+    <a class="mode-tab active" href="{% url 'chat:home' %}">Ask</a>
+    <a class="mode-tab" href="{% url 'admin:index' %}">Console</a>
+  </nav>{% endif %}
+  <div class="identity-chip">
+    <span class="avatar">{{ user.first_name|slice:":1"|default:user.username|slice:":1"|upper }}{{ user.last_name|slice:":1"|upper }}</span>
+    <span class="identity-label"><span class="muted">Asking as:</span>
+      <b>{{ user.get_full_name|default:user.username }}</b>{% if user.role %} — {{ user.role.name }}{% endif %}</span>
+    <form method="post" action="{% url 'logout' %}" class="logout-form">{% csrf_token %}
+      <button type="submit" class="logout-link">Sign out</button>
+    </form>
+  </div>
+</header>
+{% endif %}
+{% block body %}{% endblock %}
+</body>
+</html>

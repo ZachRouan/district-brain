@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}{{ conversation.title|default:"Ask" }}{% endblock %}
+{% block body %}
+<div class="app-layout">
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <a class="new-question" href="{% url 'chat:home' %}">＋ New question</a>
+    </div>
+    <div class="eyebrow">Recent</div>
+    <nav class="conversation-list">
+      {% for c in conversations %}
+        <a class="conversation-item {% if c == conversation %}active{% endif %}" href="{{ c.get_absolute_url }}">{{ c.title|default:"New conversation"|truncatechars:60 }}</a>
+      {% empty %}
+        <span class="conversation-item none">Nothing yet — ask your first question.</span>
+      {% endfor %}
+    </nav>
+    <div class="scope-card">
+      <div class="eyebrow">What you can see</div>
+      {% if user.role %}
+        <p class="scope-text">
+          {% for d in visible_docs %}{{ d.title }}{% if not forloop.last %} · {% endif %}{% empty %}No documents are scoped to your role yet.{% endfor %}
+        </p>
+        <p class="scope-note">Set by district policy.</p>
+      {% else %}
+        <p class="scope-text">No role assigned yet — ask your District Brain administrator to assign one. Until then, questions return no sources.</p>
+      {% endif %}
+    </div>
+    <div class="onprem-footer"><span class="dot"></span>ON-PREMISES · {{ server_label }}</div>
+  </aside>
+
+  <main class="chat-main">
+    <div class="thread-scroll">
+      <div class="thread">
+        {% if conversation %}
+          {% for message in conversation.messages.all %}
+            {% if message.role == "user" %}
+              <div class="user-bubble">{{ message.content }}</div>
+            {% else %}
+              <div class="answer-block">
+                <div class="answer-header">
+                  <span class="logo-tile mini">DB</span>
+                  <span class="tier-badge">TIER 1 · DISTRICT RECORD</span>
+                  {% with n=message.citations.count %}
+                    <span class="source-count">{% if n %}{{ n }} source{{ n|pluralize }} · all within your scope{% else %}nothing retrieved{% endif %}</span>
+                  {% endwith %}
+                </div>
+                <div class="answer-card">
+                  <div class="answer-text">{{ message.content|linebreaks }}</div>
+                  {% if message.citations.all %}
+                    <div class="sources-strip">
+                      <div class="eyebrow">Sources</div>
+                      {% for cite in message.citations.all %}
+                        <details class="citation">
+                          <summary class="citation-chip">▤ [{{ cite.rank }}] {{ cite.document_title }}</summary>
+                          <div class="citation-panel">
+                            <div class="citation-panel-header">▤ {{ cite.document_title }}
+                              {% if cite.document_last_updated %}<span class="citation-meta">· last updated {{ cite.document_last_updated }}</span>{% endif %}
+                            </div>
+                            <div class="citation-passage">{{ cite.chunk_text }}</div>
+                            <div class="citation-provenance">Exact passage the answer was drawn from.</div>
+                          </div>
+                        </details>
+                      {% endfor %}
+                    </div>
+                  {% endif %}
+                  <div class="answer-footer">
+                    <span class="audit-stamp">LOGGED · {{ message.created_at|date:"Y-m-d H:i" }}</span>
+                  </div>
+                </div>
+              </div>
+            {% endif %}
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">
+            <h1>Everything your district knows.<br>Only what you're allowed to see.</h1>
+            <p>Ask about policies, handbooks, schedules, procedures, or board minutes.
+               Every answer cites the exact passage it came from.</p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+    <div class="composer-wrap">
+      <form class="composer" method="post" action="{% url 'chat:ask' %}">
+        {% csrf_token %}
+        {% if conversation %}<input type="hidden" name="conversation" value="{{ conversation.pk }}">{% endif %}
+        <input class="composer-input" type="text" name="question" placeholder="Ask about policy, schedules, procedures…" autocomplete="off" autofocus required>
+        <button class="send-button" type="submit" aria-label="Send">↑</button>
+      </form>
+      <p class="disclaimer">Answers are grounded in {{ district_name }} documents and cite their sources. Every question is logged.</p>
+    </div>
+  </main>
+</div>
+{% endblock %}

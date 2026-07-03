@@ -14,6 +14,11 @@ class Conversation(models.Model):
     def __str__(self):
         return self.title or f"Conversation {self.pk}"
 
+    def get_absolute_url(self):
+        from django.urls import reverse
+
+        return reverse("chat:conversation", kwargs={"pk": self.pk})
+
 
 class Message(models.Model):
     class Role(models.TextChoices):
