@@ -1,5 +1,7 @@
 # Tier 2 Plan 1 — Data Model & Tier Guard Implementation Plan
 
+> **Execution:** Implement this plan one task at a time; each task ends in a green test run and a commit. Steps use checkbox (`- [ ]`) syntax for tracking.
+
 **Goal:** Enable Tier 2 in the model layer and add the `CurriculumMetadata` companion model, so curriculum documents can be stored with the metadata later phases key off — with no extraction, resolution, or access logic yet.
 
 **Architecture:** Widen the existing tier guard (`Document.ENABLED_TIERS` + the DB `CheckConstraint`) from Tier-1-only to Tier-1-and-2, keeping the constraint as a physical guard that still refuses Tier 3. Add `CurriculumMetadata` as a one-to-one companion to `Document`, so `Document` stays tier-agnostic. All changes are additive and migration-backed.
