@@ -83,12 +83,12 @@ def retrieve(user, query, top_k=None, max_distance=None):
     legacy = Q(embedding_backend="", embedding_dim__isnull=True)
     searchable = scope.filter(current | legacy)
 
-    stale = scope.exclude(current | legacy)
-    if stale.exists():
+    stale_count = scope.exclude(current | legacy).count()
+    if stale_count:
         logger.warning(
             "Excluding %d document(s) from retrieval: embedded with a different backend/model than "
             "the active embedder (%s / %s / %s). Run `manage.py check_embeddings --fix`.",
-            stale.count(),
+            stale_count,
             embedder.backend,
             embedder.model_name,
             embedder.dimensions,
