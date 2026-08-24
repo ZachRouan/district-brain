@@ -7,6 +7,11 @@ from pgvector.django import VectorField
 
 from accounts.models import Role
 
+# The tiers this build may store. Widening this is a deliberate, migrated change
+# (the CheckConstraint below is derived from it, so `makemigrations --check`
+# fails if the two ever drift).
+ENABLED_TIER_VALUES = (1, 2)
+
 
 class Document(models.Model):
     """One ingested source document and its corpus metadata.
@@ -20,7 +25,7 @@ class Document(models.Model):
         TIER_2 = 2, "Tier 2 — curriculum & lesson plans"
         TIER_3 = 3, "Tier 3 — student records (not enabled)"
 
-    ENABLED_TIERS = (Tier.TIER_1, Tier.TIER_2)
+    ENABLED_TIERS = tuple(map(Tier, ENABLED_TIER_VALUES))
 
     class Status(models.TextChoices):
         PENDING = "pending", "Pending"
@@ -65,11 +70,10 @@ class Document(models.Model):
             # The tier discipline made physical: the database itself refuses to
             # store anything above the enabled tiers, so no code path — a raw ORM
             # save, a bulk import, a future bug — can slip student-data-tier
-            # (Tier 3) rows in behind the clean() validation. Keep this in
-            # lockstep with ENABLED_TIERS; widening the corpus is a deliberate,
-            # migrated change.
+            # (Tier 3) rows in behind the clean() validation. Derived from
+            # ENABLED_TIER_VALUES so the two cannot drift.
             models.CheckConstraint(
-                condition=Q(tier__in=[1, 2]), name="document_enabled_tiers_only"
+                condition=Q(tier__in=list(ENABLED_TIER_VALUES)), name="document_enabled_tiers_only"
             ),
         ]
 
@@ -166,9 +170,7 @@ class CurriculumMetadata(models.Model):
         LIVING = "living", "Living (continuously revised)"
         POINT_IN_TIME = "point_in_time", "Point-in-time"
 
-    document = models.OneToOneField(
-        Document, on_delete=models.CASCADE, related_name="curriculum"
-    )
+    document = models.OneToOneField(Document, on_delete=models.CASCADE, related_name="curriculum")
     # Retrieval / relevance fields ------------------------------------------
     artifact_types = ArrayField(
         models.CharField(max_length=32, choices=ArtifactType.choices),
@@ -180,7 +182,9 @@ class CurriculumMetadata(models.Model):
         default=False, help_text="True when one file genuinely IS several artifact types."
     )
     grades = ArrayField(
-        models.CharField(max_length=8), default=list, blank=True,
+        models.CharField(max_length=8),
+        default=list,
+        blank=True,
         help_text='Instructional grade(s), e.g. ["K", "1", "2"].',
     )
     subject = models.CharField(max_length=32, choices=Subject.choices, blank=True)
