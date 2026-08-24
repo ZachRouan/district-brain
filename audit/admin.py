@@ -5,12 +5,30 @@ from django.http import HttpResponse
 
 from .models import AuditLog
 
+# A cell starting with one of these is executed as a formula by Excel/Sheets.
+# The question column is user-controlled text that lands in front of a board
+# member, so every text cell is neutralised with a leading apostrophe.
+_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value):
+    text = "" if value is None else str(value)
+    return f"'{text}" if text.startswith(_FORMULA_TRIGGERS) else text
+
 
 @admin.register(AuditLog)
 class AuditLogAdmin(admin.ModelAdmin):
     """Read-only console over the audit trail, with CSV export for the board."""
 
-    list_display = ("created_at", "username", "role_slug", "short_question", "source_count", "refused", "had_error")
+    list_display = (
+        "created_at",
+        "username",
+        "role_slug",
+        "short_question",
+        "source_count",
+        "refused",
+        "had_error",
+    )
     list_filter = ("role_slug", "refused", "created_at")
     search_fields = ("username", "question", "answer")
     date_hierarchy = "created_at"
@@ -42,7 +60,9 @@ class AuditLogAdmin(admin.ModelAdmin):
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = 'attachment; filename="district-brain-audit.csv"'
         writer = csv.writer(response)
-        writer.writerow(["timestamp", "username", "role", "question", "answer", "sources", "refused", "error"])
+        writer.writerow(
+            ["timestamp", "username", "role", "question", "answer", "sources", "refused", "error"]
+        )
         for log in queryset.order_by("created_at"):
             sources = "; ".join(
                 f"[{r['rank']}] {r['document_title']} (distance {r['distance']})" for r in log.retrieved
@@ -50,13 +70,13 @@ class AuditLogAdmin(admin.ModelAdmin):
             writer.writerow(
                 [
                     log.created_at.isoformat(),
-                    log.username,
-                    log.role_slug,
-                    log.question,
-                    log.answer,
-                    sources,
+                    csv_safe(log.username),
+                    csv_safe(log.role_slug),
+                    csv_safe(log.question),
+                    csv_safe(log.answer),
+                    csv_safe(sources),
                     "yes" if log.refused else "no",
-                    log.error,
+                    csv_safe(log.error),
                 ]
             )
         return response
