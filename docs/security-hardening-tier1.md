@@ -1,13 +1,16 @@
-# Security Review Response — Tier 1
+# Tier 1 Security Hardening
 
-Response to the code-review findings from the security review. All eight findings are
-addressed, one commit per finding, full suite green (**97 passed**, was 71). Nothing in
-`tests/test_retrieval_scoping.py` was weakened — those tests are untouched and still pass.
+Before Tier 1 went into daily use, the codebase went through an adversarial security review
+("how does a motivated 14-year-old abuse this?"). This is the record of what it found and how
+each finding was closed — one commit per finding, each with a test that fails if the fix
+regresses. Nothing in `tests/test_retrieval_scoping.py` was weakened; those tests are
+untouched and still pass.
 
-Run the suite: `uv run pytest`. Apply the new migrations: `uv run python manage.py migrate`
-(adds three provenance columns to `corpus.Document`, an `error` column to `audit.AuditLog`,
-and the Tier 1 CheckConstraint; a data migration backfills embedding provenance for any
-already-ingested corpus so an upgrade doesn't dark out existing documents).
+The review shipped three migrations: three embedding-provenance columns on `corpus.Document`,
+an `error` column on `audit.AuditLog`, and the tier CheckConstraint (a data migration
+backfills provenance for any already-ingested corpus so an upgrade doesn't dark out existing
+documents). Two findings have since been revised as the project moved on; each is marked
+**Since then** below.
 
 ---
 
@@ -41,15 +44,20 @@ asserting the scope card renders the download URL and never `/media/`.
 ## Finding 2 — retrieve() must not trust its callers
 
 **Now:** `retrieve()` hard-clamps its own arguments to caps in settings —
-`top_k = max(1, min(requested, RETRIEVAL_TOP_K_CAP))` (default cap 20) and
+`top_k = min(requested, RETRIEVAL_TOP_K_CAP)` (default cap 20) and
 `max_distance = min(requested, RETRIEVAL_MAX_DISTANCE_CAP)` (default cap 1.0, i.e.
 cosine-orthogonal — the strictest defensible relevance ceiling). Settings define the
 defaults; no caller can exceed the caps.
 
+**Since then:** the clamp was made one-directional on purpose. An *excessive* request is
+capped silently (a buggy `top_k=10000` must not crash a user's question), but *nonsensical*
+input — `top_k <= 0`, or a negative `max_distance` — is a caller error and raises
+`ValueError` instead of being silently corrected to a valid value.
+
 **Tests:** `tests/test_retrieval_clamp.py` — `top_k=10000` returns at most the cap;
 lowering the cap overrides the caller; `max_distance=99` is clamped so an on-topic query
 returns nothing once the cap is below every match; returned distances never exceed the cap;
-`top_k=0` still returns ≥1.
+`top_k <= 0` and `max_distance < 0` are rejected.
 
 **Files:** `chat/retrieval.py`, `districtbrain/settings.py`.
 
@@ -72,9 +80,9 @@ returns nothing once the cap is below every match; returned distances never exce
 **Tests:** `tests/test_embedding_provenance.py` — ingest stamps the active identity; a
 document embedded under a different backend is excluded from retrieval and flagged stale;
 legacy no-provenance documents stay searchable; `check_embeddings` reports mismatches;
-`check_embeddings --fix` re-ingests and restores searchability. Verified against the dev DB
-too: the migration backfilled all 9 seeded documents and `check_embeddings` reports them
-matching.
+`check_embeddings --fix` re-ingests and restores searchability. Also verified against a live
+database: the migration backfilled every seeded document and `check_embeddings` reported
+them all matching.
 
 **Files:** `corpus/models.py`, `corpus/embeddings.py`, `corpus/ingest.py`, `corpus/admin.py`,
 `corpus/management/commands/check_embeddings.py`, `chat/retrieval.py`, migration
@@ -129,25 +137,30 @@ retrieved passage retained.
 enforces Tier 1 alongside the existing `clean()` validation, so a raw ORM save, bulk import,
 or future bug can't slip a Tier 2/3 (student-data-tier) row in behind the form validation.
 
-**Test:** `tests/test_models.py::test_database_refuses_a_direct_tier_two_save` — a direct
-`Document.objects.create(tier=2)` raises `IntegrityError`.
+**Since then:** Tier 2 (curriculum — still no student data) was deliberately enabled. The
+constraint was widened by migration `corpus/0004` to `Q(tier__in=[1, 2])` under the name
+`document_enabled_tiers_only`; Tier 3 remains physically impossible to store, and the guard
+stays in lockstep with `Document.ENABLED_TIERS`.
+
+**Test:** `tests/test_models.py::test_database_refuses_a_direct_tier_three_save` — a direct
+`Document.objects.create(tier=3)` raises `IntegrityError` (and Tier 2 saves cleanly).
 
 **Files:** `corpus/models.py`, migration `corpus/0002_*`.
 
 ## Finding 8 — documentation debts
 
-- **PROJECT.md** — new **"Design notes / deferred"** section recording single-role-per-user
-  (and role-based, not yet relationship-based, scoping) as known Tier 1 simplifications and
-  required steps toward relationship-based access in Tier 2+. Open questions gained the
-  synchronous-ingestion-timeout note (management command exists; background jobs only if it
-  bites).
+- Recorded single-role-per-user (and role-based, not yet relationship-based, scoping) as
+  known Tier 1 simplifications and required steps toward relationship-based access in
+  Tier 2+ — now carried in the Tier 2 design spec (`docs/design/`, §2.5). Synchronous admin
+  ingestion is a known limitation (the management command exists; background jobs only if
+  it bites).
 - **docs/runbook.md** — large/bulk documents should go through `manage.py ingest` (admin
   upload is synchronous and can time out); retrieval-tuning section now covers the new caps
   and `check_embeddings`.
 
 ---
 
-## Notes for the reviewer
+## Design notes
 
 - **`visible_documents()` is unchanged** and remains the single scoping source shared by
   retrieval, the scope card, and the download view. The embedding-provenance filter lives in

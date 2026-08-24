@@ -17,10 +17,11 @@ One box (on-prem server or district-owned VPS) running:
 Nothing in the data path leaves the box. The only outbound network use is one-time:
 installing packages and downloading the embedding model (~90 MB, cached locally forever).
 
-**Tier discipline:** this build holds Tier 1 documents only — policies, handbooks,
-schedules, procedures, board minutes. No student data, and the Document model refuses
-tier tags above 1. Do not work around that check; higher tiers are a separate, board-approved
-project stage.
+**Tier discipline:** this build holds Tier 1 documents (policies, handbooks, schedules,
+procedures, board minutes) and Tier 2 documents (curriculum maps, pacing guides, lesson
+plans — Tier 2 ingestion is under construction). No student data: both the Document model
+and a database constraint refuse Tier 3. Do not work around that check; the student-records
+tier is a separate, board-approved project stage.
 
 ## 2. Requirements
 
@@ -58,7 +59,9 @@ with its last-updated date.
 - Every user holds **one role**, assigned in **admin → Accounts → Users**. A user with
   no role can sign in but retrieves nothing — that's the safe default for new accounts.
 - `is_staff` / `is_superuser` control access to the Django admin console (corpus
-  management + audit), independent of the district role.
+  management + audit), independent of the district role. **The console is not role-scoped**:
+  anyone you make `is_staff` can read every document's chunks and the full audit log. Grant
+  it only to the people who load the corpus — normally just the coordinator.
 - Demo users (`demo_admin`, `demo_teacher`, `demo_staff`, password `brain-demo-2026`)
   are for evaluation only — delete them before real staff use:
   `uv run python manage.py shell -c "from accounts.models import User; User.objects.filter(username__startswith='demo_').delete()"`
@@ -159,7 +162,10 @@ uv run gunicorn districtbrain.wsgi -b 0.0.0.0:8800 --workers 2
 ```
 - Add `whitenoise.middleware.WhiteNoiseMiddleware` right after SecurityMiddleware in
   `districtbrain/settings.py` to serve static files, or front with nginx/Caddy.
-- Run gunicorn and `docker compose up db` under systemd so both survive reboots.
+- Run gunicorn and `docker compose up db` under systemd so both survive reboots. The app
+  logs operational warnings (stale embeddings excluded from search, an unreachable answer
+  engine, dropped citation markers) to stderr, so `journalctl -u <your unit>` is where to
+  look when answers go wrong.
 - **Backups:** the Postgres volume (`docker compose exec db pg_dump -U districtbrain districtbrain > backup.sql`)
   plus the `media/` directory (original uploaded files). Nightly cron + off-box copy.
 - HTTPS on the LAN: front with Caddy using an internal CA, or terminate at your existing
@@ -174,7 +180,7 @@ generic Django + nginx/Caddy guide tells you to do it. **Do not.**
 The app enforces who-can-see-what in *retrieval*, but a file served straight off disk at
 a public URL skips that check entirely: anyone who can guess or is handed a URL like
 `https://your-server/media/corpus/2026/iep-draft.pdf` gets the file with **no login and
-no role check**. That is a FERPA-grade leak and a one-way door (see PROJECT.md risk #2).
+no role check**. That is a FERPA-grade leak and a one-way door.
 
 District Brain serves originals only through the authenticated, per-user-scoped
 `/documents/<id>/download/` view. Your reverse proxy must serve **`/static/` only** and

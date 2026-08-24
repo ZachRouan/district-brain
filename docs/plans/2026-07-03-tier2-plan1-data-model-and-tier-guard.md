@@ -10,6 +10,8 @@
 
 **Spec:** `docs/design/2026-07-03-tier2-lesson-plan-schema.md` (§2.1, §2.4). This plan is Plan 1 of a 5-plan sequence (see that spec's §8 scope boundary).
 
+**Outcome (shipped):** implemented as written, with one deviation — the Tier 2 choice-label change and the `CurriculumMetadata` create were split into separate migrations, so the final numbering is `0004_widen_tier_guard_to_tier_2`, `0005_alter_document_tier2_label`, `0006_curriculummetadata` (the plan below says `0005_curriculummetadata`).
+
 ## Global Constraints
 
 - **Access scoping lives in retrieval, never in the prompt.** This plan adds no retrieval logic; it must not weaken `visible_documents()`.
@@ -72,17 +74,15 @@ Change the enabled tiers (line 22):
 Replace the `CheckConstraint` in `Meta.constraints` (keep the surrounding comment, updated):
 
 ```python
-        constraints = [
-            # The tier discipline made physical: the database itself refuses to
-            # store anything above the enabled tiers, so no code path — a raw ORM
-            # save, a bulk import, a future bug — can slip student-data-tier
-            # (Tier 3) rows in behind the clean() validation. Keep this in
-            # lockstep with ENABLED_TIERS; widening the corpus is a deliberate,
-            # migrated change.
-            models.CheckConstraint(
-                condition=Q(tier__in=[1, 2]), name="document_enabled_tiers_only"
-            ),
-        ]
+constraints = [
+    # The tier discipline made physical: the database itself refuses to
+    # store anything above the enabled tiers, so no code path — a raw ORM
+    # save, a bulk import, a future bug — can slip student-data-tier
+    # (Tier 3) rows in behind the clean() validation. Keep this in
+    # lockstep with ENABLED_TIERS; widening the corpus is a deliberate,
+    # migrated change.
+    models.CheckConstraint(condition=Q(tier__in=[1, 2]), name="document_enabled_tiers_only"),
+]
 ```
 
 - [ ] **Step 4: Generate the migration**
@@ -221,9 +221,7 @@ class CurriculumMetadata(models.Model):
         LIVING = "living", "Living (continuously revised)"
         POINT_IN_TIME = "point_in_time", "Point-in-time"
 
-    document = models.OneToOneField(
-        Document, on_delete=models.CASCADE, related_name="curriculum"
-    )
+    document = models.OneToOneField(Document, on_delete=models.CASCADE, related_name="curriculum")
     # Retrieval / relevance fields ------------------------------------------
     artifact_types = ArrayField(
         models.CharField(max_length=32, choices=ArtifactType.choices),
@@ -235,7 +233,9 @@ class CurriculumMetadata(models.Model):
         default=False, help_text="True when one file genuinely IS several artifact types."
     )
     grades = ArrayField(
-        models.CharField(max_length=8), default=list, blank=True,
+        models.CharField(max_length=8),
+        default=list,
+        blank=True,
         help_text='Instructional grade(s), e.g. ["K", "1", "2"].',
     )
     subject = models.CharField(max_length=32, choices=Subject.choices, blank=True)

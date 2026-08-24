@@ -1,10 +1,10 @@
 # Tier 2 — Curriculum & Lesson-Plan Ingestion + Metadata Schema
 
-**Status:** Living draft — Phase 1 + Phase 2 are both in build scope; Phase 2's relationship-access engine runs on a **synthetic SIS adapter**, so it needs no real student data or real SIS. What stays **provisional** (revised once school + SIS facts and a Drive sample arrive): the concrete real-district SIS adapter, the social-studies grammar, and the §9 open questions.
+**Status:** Living draft — Phase 1 + Phase 2 are both in build scope; Phase 2's relationship-access engine runs on a **synthetic SIS adapter**, so it needs no real student data or real SIS. What stays **provisional** (revised once school + SIS facts and a document sample arrive): the concrete real-district SIS adapter, the social-studies grammar, and the §9 open questions.
 **Date:** 2026-07-03 (last revised 2026-07-03)
-**Scope decision:** Build **both phases**. Phase 1 = the district-consensus corpus (curriculum maps, pacing guides, scope & sequence). Phase 2 = teacher-authored lesson/unit plans + relationship-based access, built as an **SIS (Student Information System)-agnostic engine behind a pluggable adapter** and developed/tested against a **synthetic adapter**. Adapting to a real district's SIS — yours or another school's — is then implementing one adapter against a fixed interface (§5).
+**Scope decision:** Build **both phases**. Phase 1 = the district-consensus corpus (curriculum maps, pacing guides, scope & sequence). Phase 2 = teacher-authored lesson/unit plans + relationship-based access, built as an **SIS (Student Information System)-agnostic engine behind a pluggable adapter** and developed/tested against a **synthetic adapter**. Adapting to a real district's SIS is then implementing one adapter against a fixed interface (§5).
 
-> Ohio standard-code grammars below were extracted from the official Ohio Department of Education and Workforce (ODEW, formerly ODE) standards PDFs; the initial "uniform grade-band code" assumption was **caught and corrected** during verification — Ohio uses four distinct per-subject grammars and Ohio science is *not* NGSS (Next Generation Science Standards). Sources are listed at the end.
+> The Ohio standard-code grammars below were extracted from the official Ohio Department of Education and Workforce (ODEW, formerly ODE) standards PDFs, not assumed: an initial "uniform grade-band code" hypothesis was **caught and corrected** against those sources — Ohio uses four distinct per-subject grammars and Ohio science is *not* NGSS (Next Generation Science Standards). Ohio is the first target jurisdiction; the schema itself (§2.2) is jurisdiction-keyed. Sources are listed at the end.
 >
 > **This is a living document.** Expect it to change as facts arrive from the schools and the SIS: the §9 open questions should shrink, the SIS/section fields (§2.1) firm up, and the social-studies grammar (§3.1) get filled in or dropped. Sections not yet grounded in the district's real artifacts are marked _(provisional)_.
 
@@ -14,7 +14,7 @@
 
 District Brain's Tier 2 ingests the district's own curriculum artifacts so staff can ask *"what does our 3rd-grade math curriculum cover on fractions, and when in the year?"* — answered from the district's real documents, with chunk-level citations. The differentiating end-state (Phase 2) is **relationship-based access**: a 3rd-grade teacher retrieving what her current students' 2nd-grade teachers actually covered.
 
-The non-negotiable from the project charter holds unchanged: **access scoping lives in retrieval, never in the prompt.** Standard codes and metadata added here are *retrieval* keys; the access boundary stays exactly where Tier 1 put it — `visible_documents(user)` in `chat/retrieval.py`.
+The project's first non-negotiable holds unchanged: **access scoping lives in retrieval, never in the prompt.** Standard codes and metadata added here are *retrieval* keys; the access boundary stays exactly where Tier 1 put it — `visible_documents(user)` in `chat/retrieval.py`.
 
 ### What's new versus Tier 1
 
@@ -29,7 +29,7 @@ Tier 1 documents are flat: a `Document` scoped to a set of `Role`s, chunked, emb
 | Tier-3 bleed risk | low (no student names in a district pacing guide) | **high** (differentiation fields, "what I actually taught") |
 | Blocked on | nothing | SIS export reality, multi-role users, per-section authoring facts |
 
-Phase 1 ships real teacher value (search the district's curriculum history) **and** exercises every genuinely-new mechanism — four-grammar code extraction, local standards resolution, table-structure chunking — without waiting on SIS archaeology or risking a FERPA (Family Educational Rights and Privacy Act) one-way door. This directly serves the PROJECT.md pre-mortem: smallest-shippable over grander-unshipped (pre-mortem #6, builder abandonment), and it keeps the highest privacy exposure (pre-mortem #2, one privacy incident) out of the first build.
+Phase 1 ships real teacher value (search the district's curriculum history) **and** exercises every genuinely-new mechanism — four-grammar code extraction, local standards resolution, table-structure chunking — without waiting on SIS archaeology or risking a FERPA (Family Educational Rights and Privacy Act) one-way door. This directly serves the project's two biggest risks: smallest-shippable over grander-unshipped (builder abandonment), and keeping the highest privacy exposure (a single privacy incident) out of the first build.
 
 ---
 
@@ -100,11 +100,11 @@ Every standard *mention* found in a document, resolved or not.
 
 ### 2.4 Enabling Tier 2 in the tier guard
 
-`Document.ENABLED_TIERS` becomes `(Tier.TIER_1, Tier.TIER_2)` and the `document_tier_1_only` CheckConstraint widens to `tier__in=[1, 2]` (kept as a physical guard so **Tier 3 still cannot be stored**, by any code path). This is the deliberate, migrated widening the Tier-1 constraint comment anticipated. Per the project charter non-negotiable #3, activating Tier 2 is also a *process* gate (Tier 1 running cleanly + board awareness) — the migration is the technical half of a decision made outside the code. The existing tier-guard tests in `tests/test_models.py` must be updated in lockstep (see §8).
+`Document.ENABLED_TIERS` becomes `(Tier.TIER_1, Tier.TIER_2)` and the `document_tier_1_only` CheckConstraint widens to `tier__in=[1, 2]` (kept as a physical guard so **Tier 3 still cannot be stored**, by any code path). This is the deliberate, migrated widening the Tier-1 constraint comment anticipated. Per the project's tier discipline, activating Tier 2 is also a *process* gate (Tier 1 running cleanly + board awareness) — the migration is the technical half of a decision made outside the code. The existing tier-guard tests in `tests/test_models.py` must be updated in lockstep (see §8).
 
 ### 2.5 Multi-role users (`accounts` change)
 
-Phase 2 relationships assume a person can hold several roles at once (teacher **and** coach; a principal who also teaches a section). Today `User` holds exactly one `Role` (`accounts/models.py`); PROJECT.md's design notes flag multi-role as the required step toward relationship-based access. The change: `User.role` (single FK) → a many-to-many (or a `UserRole` through model), and every `visible_documents()` caller unions the user's role scopes. This touches the `accounts` model and the retrieval boundary, so it lands with Phase 2, behind the same scoping tests.
+Phase 2 relationships assume a person can hold several roles at once (teacher **and** coach; a principal who also teaches a section). Today `User` holds exactly one `Role` (`accounts/models.py`) — a known Tier 1 simplification; multi-role is the required step toward relationship-based access. The change: `User.role` (single FK) → a many-to-many (or a `UserRole` through model), and every `visible_documents()` caller unions the user's role scopes. This touches the `accounts` model and the retrieval boundary, so it lands with Phase 2, behind the same scoping tests.
 
 ---
 
@@ -231,13 +231,13 @@ Both phases are in build scope. Phase 2's relationship engine is built and teste
 
 **In — Phase 2 (relationship engine, on synthetic SIS):** multi-role users (`accounts` change + retrieval union); the `SISAdapter` interface + a **synthetic adapter** (generated rosters/sections/enrollments/feeder patterns); the relationship-scoped `visible_documents()` branch; ingest of teacher-authored unit/lesson plans with the tier-3 scrub enforced; the "motivated 14-year-old" red-team test suite against the synthetic building.
 
-**Out (deferred — needs real facts):** the concrete **real-district SIS adapter** (yours or another school's — waits on §9 answers about what your SIS exposes); anything gated on the **per-section-vs-grade-team authoring** fact (§9 Q1) — the engine is built and correct, but real `sis_section_id` population in *your* building waits on that answer; the **social-studies parser** (grammar unverified); Stage-2 semantic auto-suggestion in production (built as a harness, off by default until the eval passes); Drive `appProperties` write-back.
+**Out (deferred — needs real facts):** the concrete **real-district SIS adapter** (waits on §9 answers about what the SIS exposes); anything gated on the **per-section-vs-grade-team authoring** fact (§9 Q1) — the engine is built and correct, but real `sis_section_id` population in a given building waits on that answer; the **social-studies parser** (grammar unverified); Stage-2 semantic auto-suggestion in production (built as a harness, off by default until the eval passes); Drive `appProperties` write-back.
 
 ---
 
-## 9. Open questions — deferred to colleagues / a Drive sample  _(provisional — this list shrinks as answers arrive)_
+## 9. Open questions — deferred to district staff / a document sample  _(provisional — this list shrinks as answers arrive)_
 
-These no longer block *building* Phase 2 (the engine runs on the synthetic adapter) — they gate its **real-data payoff in your building** and the shape of your real SIS adapter. Nothing web research can answer; only colleagues + your SIS + a Drive sample. Phrased as precise asks so the conversation is short:
+These no longer block *building* Phase 2 (the engine runs on the synthetic adapter) — they gate its **real-data payoff in a given building** and the shape of that district's SIS adapter. Nothing desk research can answer; only the teaching staff, the SIS, and a sample of real plans. Phrased as precise asks so the conversation is short:
 
 1. Are lesson plans authored **per-section**, or **shared across a grade-level team**? (Decides whether `sis_section_id` is fillable — and whether the flagship feeder feature is realizable from existing artifacts at all.)
 2. Does the **SIS expose** section→file / teacher→course-**year** links, and the **feeder-pattern graph**? (Without these org-graph keys, relationship access can't resolve at retrieval time.)
