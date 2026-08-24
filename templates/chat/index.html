@@ -86,9 +86,10 @@
       <form class="composer" method="post" action="{% url 'chat:ask' %}">
         {% csrf_token %}
         {% if conversation %}<input type="hidden" name="conversation" value="{{ conversation.pk }}">{% endif %}
-        <input class="composer-input" type="text" name="question" placeholder="Ask about policy, schedules, procedures…" autocomplete="off" autofocus required>
+        <input class="composer-input" type="text" name="question" value="{{ question|default:'' }}" maxlength="{{ ask_max_chars }}" placeholder="Ask about policy, schedules, procedures…" autocomplete="off" autofocus required>
         <button class="send-button" type="submit" aria-label="Send">↑</button>
       </form>
+      {% if error %}<p class="composer-error">{{ error }}</p>{% endif %}
       <p class="disclaimer">Answers are grounded in {{ district_name }} documents and cite their sources. Every question is logged.</p>
     </div>
   </main>

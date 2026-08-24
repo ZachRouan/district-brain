@@ -1,4 +1,5 @@
 import pytest
+from django.core.cache import cache
 
 from corpus import embeddings
 
@@ -29,6 +30,12 @@ def _mock_llm_backend(settings):
     settings.LLM_BACKEND = "chat.llm.MockLLMBackend"
     settings.LLAMA_SERVER_URL = "http://127.0.0.1:9999"
     settings.GOOGLE_SSO_ENABLED = False
+
+
+@pytest.fixture(autouse=True)
+def _fresh_cache():
+    """Rate-limit counters live in the cache; no test inherits another's."""
+    cache.clear()
 
 
 @pytest.fixture(autouse=True)

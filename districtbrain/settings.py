@@ -171,6 +171,15 @@ LLM_DISABLE_THINKING = env_bool("LLM_DISABLE_THINKING", True)
 RETRIEVAL_TOP_K = int(os.environ.get("RETRIEVAL_TOP_K", "6"))
 RETRIEVAL_MAX_DISTANCE = float(os.environ.get("RETRIEVAL_MAX_DISTANCE", "0.60"))
 
+# Abuse limits on the ask endpoint. Questions longer than this are rejected
+# (a real question is a sentence; the model gets a few hundred tokens anyway),
+# and each user may ask at most this many questions per minute so one account
+# cannot monopolise the single answer engine. Counted in the Django cache: with
+# the default per-process cache and N gunicorn workers the effective limit is
+# up to N times this; set 0 to disable.
+ASK_MAX_QUESTION_CHARS = int(os.environ.get("ASK_MAX_QUESTION_CHARS", "2000"))
+ASK_RATE_LIMIT_PER_MINUTE = int(os.environ.get("ASK_RATE_LIMIT_PER_MINUTE", "30"))
+
 # Hard caps that retrieve() enforces on its own arguments, so no caller — a
 # future feature, a tampered request, a bug — can widen a search beyond what a
 # grounded, auditable answer should ever draw on. These bound the *ceiling*;

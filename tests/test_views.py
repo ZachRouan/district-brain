@@ -147,3 +147,49 @@ def test_user_without_role_sees_empty_scope_and_gets_refusal(client, handbook):
 
     response = client.post(reverse("chat:ask"), {"question": "When is a phone returned?"}, follow=True)
     assert "I don't have that in my sources" in html_module.unescape(response.content.decode())
+
+
+# --- Abuse limits: rejected before anything is stored. ---
+
+
+def test_overlong_question_is_rejected_and_nothing_is_stored(client, teacher, handbook, settings):
+    from audit.models import AuditLog
+    from chat.models import Message
+
+    settings.ASK_MAX_QUESTION_CHARS = 100
+    client.login(username="alvarez", password="pw")
+    response = client.post(reverse("chat:ask"), {"question": "x" * 101})
+    assert response.status_code == 400
+    assert "too long" in response.content.decode()
+    assert Conversation.objects.count() == 0
+    assert Message.objects.count() == 0
+    assert AuditLog.objects.count() == 0
+
+    assert (
+        client.post(reverse("chat:ask"), {"question": "x" * 100}).status_code == 302
+    )  # at the limit is fine
+
+
+def test_per_user_rate_limit(client, teacher, handbook, settings):
+    from audit.models import AuditLog
+
+    settings.ASK_RATE_LIMIT_PER_MINUTE = 3
+    client.login(username="alvarez", password="pw")
+    for _ in range(3):
+        assert client.post(reverse("chat:ask"), {"question": "When is a phone returned?"}).status_code == 302
+    response = client.post(reverse("chat:ask"), {"question": "When is a phone returned?"})
+    assert response.status_code == 429
+    assert "Wait a minute" in response.content.decode()
+    assert AuditLog.objects.count() == 3  # the fourth never reached retrieval
+
+    # Another user is unaffected: the limit is per account.
+    User.objects.create_user(username="other", password="pw", role=teacher.role)
+    client.login(username="other", password="pw")
+    assert client.post(reverse("chat:ask"), {"question": "When is a phone returned?"}).status_code == 302
+
+
+def test_rate_limit_can_be_disabled(client, teacher, handbook, settings):
+    settings.ASK_RATE_LIMIT_PER_MINUTE = 0
+    client.login(username="alvarez", password="pw")
+    for _ in range(5):
+        assert client.post(reverse("chat:ask"), {"question": "When is a phone returned?"}).status_code == 302
