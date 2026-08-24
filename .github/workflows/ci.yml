@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg17
+        env:
+          POSTGRES_DB: districtbrain
+          POSTGRES_USER: districtbrain
+          POSTGRES_PASSWORD: districtbrain
+        ports:
+          - 54320:5432
+        options: >-
+          --health-cmd "pg_isready -U districtbrain"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      SECRET_KEY: ci-only-not-a-secret
+      EMBEDDING_BACKEND: hash
+      LLM_BACKEND: chat.llm.MockLLMBackend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run python manage.py makemigrations --check --dry-run
+      - run: uv run pytest -q
