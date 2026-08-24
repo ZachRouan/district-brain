@@ -100,16 +100,16 @@ def _split_md_row(line: str):
 
 def _is_md_separator(line: str) -> bool:
     """A GitHub-flavored-markdown table separator, e.g. `| --- | :--: |`."""
-    if "|" not in line and "-" not in line:
-        return False
+    if "|" not in line:
+        return False  # a bare "---" is a horizontal rule, not a table separator
     cells = _split_md_row(line)
     return bool(cells) and all(re.fullmatch(r":?-{1,}:?", cell.strip() or "") for cell in cells)
 
 
 def _extract_markdown(data: bytes, title=None) -> str:
     """Markdown passes through unchanged except GFM tables, whose rows are
-    enriched with the document title and nearest heading. Non-table content is
-    byte-for-byte what plain decoding produced."""
+    enriched with the nearest heading (falling back to the document title).
+    Non-table content is byte-for-byte what plain decoding produced."""
     text = _decode(data).replace("\r\n", "\n").replace("\r", "\n")
     lines = text.split("\n")
     out = []
@@ -124,12 +124,7 @@ def _extract_markdown(data: bytes, title=None) -> str:
             i += 1
             continue
         # A table starts where a header line is followed by a separator line.
-        if (
-            "|" in line
-            and not _is_md_separator(line)
-            and i + 1 < n
-            and _is_md_separator(lines[i + 1])
-        ):
+        if "|" in line and not _is_md_separator(line) and i + 1 < n and _is_md_separator(lines[i + 1]):
             header_cells = _split_md_row(line)
             i += 2
             data_rows = []
@@ -172,7 +167,7 @@ def _render_html_table(table, title, nearest_heading):
 
 
 def _extract_html(data: bytes, title=None) -> str:
-    from bs4 import BeautifulSoup
+    from bs4 import BeautifulSoup, Comment, NavigableString
 
     soup = BeautifulSoup(_decode(data), "html.parser")
     for tag in soup(["script", "style"]):
@@ -180,13 +175,20 @@ def _extract_html(data: bytes, title=None) -> str:
 
     blocks = []
     nearest_heading = None
+    structural = _HTML_HEADINGS | _HTML_TEXT_BLOCKS | {"table"}
 
     def walk(node):
         nonlocal nearest_heading
         for el in node.children:
-            name = getattr(el, "name", None)
-            if name is None:
+            if isinstance(el, Comment):
                 continue
+            if isinstance(el, NavigableString):
+                # Loose text directly inside a container (<body>Text<p>…) — keep it.
+                text = " ".join(str(el).split())
+                if text:
+                    blocks.append(text)
+                continue
+            name = el.name
             if name == "table":
                 rendered = _render_html_table(el, title, nearest_heading)
                 if rendered:
@@ -200,8 +202,15 @@ def _extract_html(data: bytes, title=None) -> str:
                 text = el.get_text(" ", strip=True)
                 if text:
                     blocks.append(text)
+            elif el.find(structural) is not None:
+                walk(el)  # a container holding real blocks (body, div, section, …): descend
             else:
-                walk(el)  # descend into containers (body, div, section, …)
+                # A bare <div>/<span>/<td>… with only inline content. Word's "Save
+                # as HTML" and many Google exports put body text here, so it is a
+                # block in its own right — never silently dropped.
+                text = el.get_text(" ", strip=True)
+                if text:
+                    blocks.append(text)
 
     walk(soup.body or soup)
     return "\n\n".join(blocks) if blocks else soup.get_text(separator="\n")
@@ -275,8 +284,8 @@ def extract_text(source, filename=None, title=None) -> str:
     """Extract clean text from a path or an open binary file object.
 
     `filename` supplies the extension when `source` is a file object. `title` is
-    the document's title, woven into enriched table-row chunks so a schedule row
-    still matches a natural-language question (see module docstring).
+    the document's title, used as the context of enriched table rows only when no
+    heading precedes the table (see module docstring).
     """
     if hasattr(source, "read"):
         name = filename or getattr(source, "name", "")

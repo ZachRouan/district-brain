@@ -126,7 +126,11 @@ def test_docx_table_rows_are_enriched():
     d = docx.Document()
     d.add_heading("Regular schedule", level=2)
     table = d.add_table(rows=3, cols=3)
-    data = [("Period", "Start", "End"), ("First Period", "7:50 AM", "8:38 AM"), ("Second Period", "8:42 AM", "9:30 AM")]
+    data = [
+        ("Period", "Start", "End"),
+        ("First Period", "7:50 AM", "8:38 AM"),
+        ("Second Period", "8:42 AM", "9:30 AM"),
+    ]
     for r, (a, b, c) in enumerate(data):
         table.rows[r].cells[0].text, table.rows[r].cells[1].text, table.rows[r].cells[2].text = a, b, c
     buf = io.BytesIO()
@@ -140,3 +144,34 @@ def test_table_with_no_heading_falls_back_to_the_document_title():
     md = "| Period | Start |\n| --- | --- |\n| First Period | 7:50 AM |\n"
     text = extract_text(io.BytesIO(md.encode()), filename="bare.md", title="Bell Schedules 2026-27")
     assert "Bell Schedules 2026-27: Period: First Period, Start: 7:50 AM" in text
+
+
+def test_html_text_in_bare_containers_is_not_dropped():
+    """Word's "Save as HTML" and Google exports put body text in bare <div>/<span>
+    elements with no <p>. That text must reach the corpus, not vanish silently."""
+    html = (
+        "<h1>Dress code</h1><div>Hats are not permitted indoors.</div>"
+        "<span>Buses leave at 2:45.</span><div><p>Inside a paragraph.</p><div>Sibling div text.</div></div>"
+        "<!-- a comment is not content -->"
+    )
+    text = extract_text(io.BytesIO(html.encode()), filename="export.html")
+    assert "Hats are not permitted indoors." in text
+    assert "Buses leave at 2:45." in text
+    assert "Inside a paragraph." in text
+    assert "Sibling div text." in text
+    assert "comment" not in text
+
+
+def test_html_loose_text_directly_in_body_is_kept():
+    html = "<body>Loose opening line.<p>A paragraph.</p></body>"
+    text = extract_text(io.BytesIO(html.encode()), filename="loose.html")
+    assert "Loose opening line." in text
+    assert "A paragraph." in text
+
+
+def test_markdown_horizontal_rule_is_not_a_table():
+    md = "Options: a | b\n\n---\n\nAfter the rule."
+    text = extract_text(io.BytesIO(md.encode()), filename="rule.md")
+    assert "Options: a | b" in text
+    assert "After the rule." in text
+    assert "\f" not in text
