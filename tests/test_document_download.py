@@ -89,3 +89,12 @@ def test_unready_document_is_not_downloadable_by_role(client, roles, users):
     Document.objects.filter(pk=doc.pk).update(status=Document.Status.PROCESSING)
     client.login(username="teacher_u", password="pw")
     assert download(client, doc).status_code == 404
+
+
+def test_user_without_a_role_cannot_download_anything(client, roles):
+    """No role means no scope — the least-privilege default for new accounts
+    holds for originals exactly as it does for answers."""
+    doc = make_downloadable_doc("Shared handbook", [roles["teacher"]])
+    User.objects.create_user(username="newcomer", password="pw", role=None)
+    client.login(username="newcomer", password="pw")
+    assert download(client, doc).status_code == 404
