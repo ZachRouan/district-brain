@@ -32,28 +32,30 @@
     <div class="thread-scroll">
       <div class="thread">
         {% if conversation %}
-          {% for message in conversation.messages.all %}
+          {% for message in thread %}
             {% if message.role == "user" %}
               <div class="user-bubble">{{ message.content }}</div>
             {% else %}
               <div class="answer-block">
+                {% with cites=message.citations.all %}
                 <div class="answer-header">
                   <span class="logo-tile mini">DB</span>
-                  <span class="tier-badge">TIER 1 · DISTRICT RECORD</span>
-                  {% with n=message.citations.count %}
+                  <span class="tier-badge">DISTRICT RECORD</span>
+                  {% with n=cites|length %}
                     <span class="source-count">{% if n %}{{ n }} source{{ n|pluralize }} · all within your scope{% else %}nothing retrieved{% endif %}</span>
                   {% endwith %}
                 </div>
                 <div class="answer-card">
                   <div class="answer-text">{{ message.content|linebreaks }}</div>
-                  {% if message.citations.all %}
+                  {% if cites %}
                     <div class="sources-strip">
                       <div class="eyebrow">Sources</div>
-                      {% for cite in message.citations.all %}
+                      {% for cite in cites %}
                         <details class="citation">
                           <summary class="citation-chip">▤ [{{ cite.rank }}] {{ cite.document_title }}</summary>
                           <div class="citation-panel">
                             <div class="citation-panel-header">▤ {{ cite.document_title }}
+                              {% if cite.chunk %}<span class="citation-meta">· tier {{ cite.chunk.document.tier }}</span>{% endif %}
                               {% if cite.document_last_updated %}<span class="citation-meta">· last updated {{ cite.document_last_updated }}</span>{% endif %}
                             </div>
                             <div class="citation-passage">{{ cite.chunk_text }}</div>
@@ -67,6 +69,7 @@
                     <span class="audit-stamp">LOGGED · {{ message.created_at|date:"Y-m-d H:i" }}</span>
                   </div>
                 </div>
+                {% endwith %}
               </div>
             {% endif %}
           {% endfor %}

@@ -13,7 +13,7 @@
   <span class="wordmark">District Brain</span>
   <span class="district-name">{{ district_name }}</span>
   {% if user.is_staff %}<nav class="mode-tabs">
-    <a class="mode-tab active" href="{% url 'chat:home' %}">Ask</a>
+    <a class="mode-tab{% if request.resolver_match.app_name == 'chat' %} active{% endif %}" href="{% url 'chat:home' %}">Ask</a>
     <a class="mode-tab" href="{% url 'admin:index' %}">Console</a>
   </nav>{% endif %}
   <div class="identity-chip">

@@ -30,7 +30,7 @@ def home(request):
 def conversation_detail(request, pk):
     conversation = get_object_or_404(Conversation, pk=pk, user=request.user)
     context = _shell_context(request, conversation)
-    context["messages_with_citations"] = conversation.messages.prefetch_related("citations")
+    context["thread"] = conversation.messages.prefetch_related("citations")
     return render(request, "chat/index.html", context)
 
 
