@@ -82,7 +82,20 @@ CORPUS = {
 class Command(BaseCommand):
     help = "Create demo roles, demo users, and ingest the synthetic sample corpus."
 
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Seed even with DEBUG off. The demo password is public; never do this where staff sign in.",
+        )
+
     def handle(self, *args, **options):
+        if not settings.DEBUG and not options["force"]:
+            raise CommandError(
+                "Refusing to seed demo users with DEBUG off: demo_admin is a superuser whose password "
+                "is published in the repository. This looks like a production database. Pass --force "
+                "only for an evaluation box, and delete the demo users before real staff use it."
+            )
         if not SAMPLE_DIR.is_dir():
             raise CommandError(f"sample_corpus/ not found at {SAMPLE_DIR}")
 

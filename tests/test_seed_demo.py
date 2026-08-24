@@ -3,6 +3,7 @@
 import pytest
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
+from django.core.management.base import CommandError
 
 from accounts.models import Role
 from chat.retrieval import retrieve, visible_documents
@@ -15,8 +16,21 @@ User = get_user_model()
 
 
 @pytest.fixture
-def seeded():
+def seeded(settings):
+    settings.DEBUG = True  # the development case; production refuses without --force
     call_command("seed_demo", verbosity=0)
+
+
+def test_seed_refuses_with_debug_off_unless_forced(settings):
+    """demo_admin is a superuser with a published password; a production
+    database must not get it by accident."""
+    settings.DEBUG = False
+    with pytest.raises(CommandError, match="DEBUG off"):
+        call_command("seed_demo", verbosity=0)
+    assert not User.objects.filter(username__startswith="demo_").exists()
+
+    call_command("seed_demo", "--force", verbosity=0)
+    assert User.objects.filter(username="demo_admin").exists()
 
 
 def test_seed_creates_roles_and_demo_users(seeded):
