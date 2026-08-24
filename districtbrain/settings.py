@@ -42,7 +42,7 @@ ALLOWED_HOSTS = [
 DISTRICT_NAME = os.environ.get("DISTRICT_NAME", "Maple Ridge USD")
 
 INSTALLED_APPS = [
-    "django.contrib.admin",
+    "districtbrain.apps.ConsoleAdminConfig",  # django.contrib.admin, superusers only
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
