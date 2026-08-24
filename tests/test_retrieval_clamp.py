@@ -41,7 +41,7 @@ def test_top_k_is_hard_capped_regardless_of_caller(teacher):
     """A caller asking for 10000 passages gets at most the cap, never more."""
     make_document_with_chunks(teacher.role, n=25)
     results = retrieve(teacher, QUERY, top_k=10000)
-    assert len(results) == 20  # settings.RETRIEVAL_TOP_K_CAP default
+    assert len(results) == 20  # RETRIEVAL_TOP_K_CAP, pinned in conftest
 
 
 def test_caller_cannot_raise_top_k_above_the_cap(teacher, settings):

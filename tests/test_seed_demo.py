@@ -6,7 +6,8 @@ from django.core.management import call_command
 
 from accounts.models import Role
 from chat.retrieval import retrieve, visible_documents
-from corpus.models import Document
+from corpus.management.commands.seed_demo import CORPUS
+from corpus.models import Chunk, Document
 
 pytestmark = pytest.mark.django_db
 
@@ -20,7 +21,11 @@ def seeded():
 
 def test_seed_creates_roles_and_demo_users(seeded):
     assert set(Role.objects.values_list("slug", flat=True)) == {"admin", "teacher", "staff"}
-    for username, role_slug in (("demo_admin", "admin"), ("demo_teacher", "teacher"), ("demo_staff", "staff")):
+    for username, role_slug in (
+        ("demo_admin", "admin"),
+        ("demo_teacher", "teacher"),
+        ("demo_staff", "staff"),
+    ):
         user = User.objects.get(username=username)
         assert user.role.slug == role_slug
     assert User.objects.get(username="demo_admin").is_staff
@@ -28,7 +33,7 @@ def test_seed_creates_roles_and_demo_users(seeded):
 
 def test_seed_ingests_synthetic_corpus_ready_to_query(seeded):
     docs = Document.objects.all()
-    assert docs.count() >= 5
+    assert docs.count() == len(CORPUS)
     assert all(d.status == Document.Status.READY for d in docs)
     assert all(d.tier == 1 for d in docs)
     assert all(d.last_updated is not None for d in docs)
@@ -49,8 +54,11 @@ def test_seeded_scoping_demo_works(seeded):
 
 
 def test_seed_is_idempotent(seeded):
-    before_docs = Document.objects.count()
+    """A second run creates nothing and re-ingests nothing: the same chunk rows
+    survive, so it is a true no-op rather than a wipe-and-reload."""
     before_users = User.objects.count()
+    before_chunk_ids = set(Chunk.objects.values_list("id", flat=True))
     call_command("seed_demo", verbosity=0)
-    assert Document.objects.count() == before_docs
+    assert Document.objects.count() == len(CORPUS)
     assert User.objects.count() == before_users
+    assert set(Chunk.objects.values_list("id", flat=True)) == before_chunk_ids

@@ -1,5 +1,5 @@
 """Google Workspace SSO is scaffolded behind GOOGLE_SSO_ENABLED and must not
-be required for anything in the Tier 1 slice."""
+be required for anything in the base build."""
 
 import os
 import subprocess
@@ -29,8 +29,14 @@ def test_login_page_offers_google_when_enabled(client, settings):
 def test_sso_enabled_settings_are_valid():
     """`manage.py check` in a subprocess with the flag on proves the allauth
     wiring (apps, middleware, urls) actually assembles."""
+    # A minimal environment, not the developer's: only what the interpreter and
+    # settings need. (settings.py still reads a .env if one exists, but explicit
+    # variables win over it.)
     env = {
-        **os.environ,
+        "PATH": os.environ.get("PATH", ""),
+        "HOME": os.environ.get("HOME", ""),
+        "SECRET_KEY": "test-only-secret-key",
+        "DEBUG": "true",
         "GOOGLE_SSO_ENABLED": "true",
         "GOOGLE_CLIENT_ID": "test-client-id",
         "GOOGLE_CLIENT_SECRET": "test-secret",

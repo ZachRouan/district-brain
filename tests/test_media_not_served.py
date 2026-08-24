@@ -6,11 +6,9 @@ guides — would let anyone fetch any file by URL, bypassing retrieval scoping.
 Downloads must go only through the authenticated, per-user-scoped
 chat:document_download view.
 
-The finding asks specifically that django.views.static.serve is not wired to
-MEDIA_ROOT "outside DEBUG". We hold the stronger invariant: it is never wired to
-MEDIA_ROOT at all, in any DEBUG state, so dev habits can't leak a public /media/
-block into production and dev stays identical to prod. That strictly implies the
-outside-DEBUG requirement.
+The invariant is deliberately stronger than "not outside DEBUG": MEDIA_ROOT is
+never wired to django.views.static.serve in any DEBUG state, so dev habits can't
+leak a public /media/ block into production and dev stays identical to prod.
 """
 
 import pytest

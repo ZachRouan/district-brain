@@ -12,6 +12,7 @@ from django.core.files.base import ContentFile
 
 from accounts.models import Role
 from chat.retrieval import retrieve
+from corpus.embeddings import get_embedder
 from corpus.ingest import ingest_document
 from corpus.models import Document
 
@@ -61,11 +62,17 @@ def test_enriched_schedule_row_is_retrieved_within_the_existing_cutoff(teacher, 
     assert "Regular Day: Period: First Period, Start: 7:50 AM" in first_period[0].chunk.text
 
 
-def test_the_row_is_below_cutoff_because_of_enrichment_not_a_looser_threshold(teacher, settings):
-    """Guard against a future regression that 'fixes' recall by raising the cutoff:
-    the raw pipe row would still be refused at 0.60; only enrichment gets it in."""
-    settings.RETRIEVAL_MAX_DISTANCE = 0.60
-    ingest_bell_schedule(teacher)
-    results = retrieve(teacher, "what time does first period start")
-    assert all(r.distance <= 0.60 for r in results)  # cutoff itself is unchanged
-    assert results, "enrichment brought the row under the unchanged cutoff"
+def test_the_row_is_below_cutoff_because_of_enrichment_not_a_looser_threshold():
+    """Guard against a future regression that 'fixes' recall by raising the cutoff.
+    Embed the raw pipe row and the enriched row with the same embedder: the raw
+    row sits past 0.60 and would be refused; only the enriched row lands inside."""
+    embedder = get_embedder()
+    query = embedder.embed_query("what time does first period start")
+
+    def distance(text):
+        return 1 - sum(a * b for a, b in zip(query, embedder.embed_query(text), strict=True))
+
+    raw = distance("| First Period | 7:50 AM | 8:38 AM |")
+    enriched = distance("Regular Day: Period: First Period, Start: 7:50 AM, End: 8:38 AM")
+    assert raw > 0.60, f"raw pipe row unexpectedly within the cutoff ({raw:.2f})"
+    assert enriched <= 0.60, f"enriched row outside the cutoff ({enriched:.2f})"
