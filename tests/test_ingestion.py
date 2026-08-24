@@ -12,7 +12,8 @@ pytestmark = pytest.mark.django_db
 
 LONG_TEXT = "\n\n".join(
     f"Policy section {i}. Students shall be counted tardy if not seated when the bell rings. "
-    "Three tardies convert to one absence for attendance accounting." for i in range(12)
+    "Three tardies convert to one absence for attendance accounting."
+    for i in range(12)
 )
 
 
@@ -52,7 +53,9 @@ def test_changed_content_replaces_chunks():
     ingest_document(doc)
     doc.refresh_from_db()
     before_ids = set(doc.chunks.values_list("id", flat=True))
-    doc.source_file.save("attendance-policy.txt", ContentFile(b"A completely revised policy text."), save=True)
+    doc.source_file.save(
+        "attendance-policy.txt", ContentFile(b"A completely revised policy text."), save=True
+    )
     result = ingest_document(doc)
     doc.refresh_from_db()
     assert result.outcome == "ingested"
@@ -97,7 +100,7 @@ def test_ingest_command_is_idempotent_per_source_path(tmp_path):
 def test_ingest_command_rejects_unknown_role(tmp_path):
     f = tmp_path / "note.txt"
     f.write_text("Anything at all.")
-    with pytest.raises(Exception, match="[Uu]nknown role"):
+    with pytest.raises(Exception, match=r"[Uu]nknown role"):
         call_command("ingest", str(f), "--roles", "wizard")
     assert Document.objects.count() == 0
 
@@ -111,3 +114,17 @@ def test_ingest_command_walks_directories(tmp_path):
     (sub / "ignored.xlsx").write_bytes(b"binary")
     call_command("ingest", str(tmp_path), "--roles", "staff")
     assert Document.objects.count() == 2
+
+
+@pytest.mark.parametrize(
+    ("stem", "title"),
+    [
+        ("board-policy-JICJ", "Board policy JICJ"),
+        ("staff_handbook_2026-27", "Staff handbook 2026 27"),
+        ("IEP-procedures", "IEP procedures"),
+    ],
+)
+def test_prettify_keeps_acronyms_in_derived_titles(stem, title):
+    from corpus.management.commands.ingest import prettify
+
+    assert prettify(stem) == title

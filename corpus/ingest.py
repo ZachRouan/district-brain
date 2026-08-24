@@ -58,34 +58,36 @@ def ingest_document(document, force=False):
     if not texts:
         return _fail(document, "No extractable text found in the file.")
 
-    embedder = get_embedder()
-    embeddings = embedder.embed(texts)
-
-    with transaction.atomic():
-        document.chunks.all().delete()
-        Chunk.objects.bulk_create(
-            Chunk(document=document, index=i, text=t, embedding=e)
-            for i, (t, e) in enumerate(zip(texts, embeddings))
-        )
-        document.content_hash = content_hash
-        # Stamp which embedder produced these vectors, so a later model swap is
-        # detected instead of silently corrupting retrieval.
-        document.embedding_backend = embedder.backend
-        document.embedding_model = embedder.model_name
-        document.embedding_dim = embedder.dimensions
-        document.status = Document.Status.READY
-        document.error_message = ""
-        document.ingested_at = timezone.now()
-        document.save(
-            update_fields=[
-                "content_hash",
-                "embedding_backend",
-                "embedding_model",
-                "embedding_dim",
-                "status",
-                "error_message",
-                "ingested_at",
-            ]
-        )
+    try:
+        embedder = get_embedder()
+        embeddings = embedder.embed(texts)
+        with transaction.atomic():
+            document.chunks.all().delete()
+            Chunk.objects.bulk_create(
+                Chunk(document=document, index=i, text=t, embedding=e)
+                for i, (t, e) in enumerate(zip(texts, embeddings, strict=True))
+            )
+            document.content_hash = content_hash
+            # Stamp which embedder produced these vectors, so a later model swap is
+            # detected instead of silently corrupting retrieval.
+            document.embedding_backend = embedder.backend
+            document.embedding_model = embedder.model_name
+            document.embedding_dim = embedder.dimensions
+            document.status = Document.Status.READY
+            document.error_message = ""
+            document.ingested_at = timezone.now()
+            document.save(
+                update_fields=[
+                    "content_hash",
+                    "embedding_backend",
+                    "embedding_model",
+                    "embedding_dim",
+                    "status",
+                    "error_message",
+                    "ingested_at",
+                ]
+            )
+    except Exception as exc:  # a failed model load or a vector-width mismatch must not strand PROCESSING
+        return _fail(document, f"Could not embed or store chunks: {exc}")
 
     return IngestResult(document=document, outcome="ingested", chunk_count=len(texts))

@@ -21,7 +21,13 @@ from corpus.models import Document
 
 
 def prettify(stem: str) -> str:
-    return stem.replace("-", " ").replace("_", " ").strip().capitalize()
+    """ "board-policy-JICJ" -> "Board policy JICJ": capitalise the first word only,
+    so acronyms and policy codes in the filename survive."""
+    words = stem.replace("-", " ").replace("_", " ").split()
+    if not words:
+        return stem
+    words[0] = words[0][0].upper() + words[0][1:]
+    return " ".join(words)
 
 
 class Command(BaseCommand):
@@ -35,7 +41,9 @@ class Command(BaseCommand):
             help="Comma-separated role slugs allowed to retrieve these documents (explicit on purpose).",
         )
         parser.add_argument("--title", help="Document title (single file only; defaults to the filename).")
-        parser.add_argument("--last-updated", help="Content revision date, YYYY-MM-DD (defaults to file mtime).")
+        parser.add_argument(
+            "--last-updated", help="Content revision date, YYYY-MM-DD (defaults to file mtime)."
+        )
         parser.add_argument("--force", action="store_true", help="Re-chunk and re-embed even if unchanged.")
 
     def handle(self, *args, **options):
@@ -72,9 +80,8 @@ class Command(BaseCommand):
                         self.stdout.write(self.style.WARNING(f"  skipped (unsupported type): {child}"))
             elif path.is_file():
                 if path.suffix.lower() not in SUPPORTED_EXTENSIONS:
-                    raise CommandError(
-                        f"Unsupported file type: {path.suffix}. Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
-                    )
+                    supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
+                    raise CommandError(f"Unsupported file type: {path.suffix}. Supported: {supported}")
                 files.append(path)
             else:
                 raise CommandError(f"No such file or directory: {raw}")
