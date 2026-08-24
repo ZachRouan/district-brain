@@ -9,6 +9,7 @@ for what to change in production.
 import os
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,11 +21,22 @@ def env_bool(name: str, default: bool = False) -> bool:
     return os.environ.get(name, str(default)).strip().lower() in ("1", "true", "yes", "on")
 
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "insecure-dev-only-key-set-SECRET_KEY-in-env")
-
 DEBUG = env_bool("DEBUG", False)
 
-ALLOWED_HOSTS = [h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()]
+# The fallback key is public (it is in this repository), so it is only ever
+# acceptable with DEBUG on. A production boot without a real key is refused
+# rather than silently issuing forgeable session cookies.
+_DEV_SECRET_KEY = "insecure-dev-only-key-set-SECRET_KEY-in-env"
+SECRET_KEY = os.environ.get("SECRET_KEY", _DEV_SECRET_KEY)
+if not DEBUG and SECRET_KEY == _DEV_SECRET_KEY:
+    raise ImproperlyConfigured(
+        "SECRET_KEY is not set. Generate one (see .env.example) and put it in .env, "
+        "or set DEBUG=true for development."
+    )
+
+ALLOWED_HOSTS = [
+    h.strip() for h in os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",") if h.strip()
+]
 
 # Shown in the UI header and used in synthetic fixtures. Set per district.
 DISTRICT_NAME = os.environ.get("DISTRICT_NAME", "Maple Ridge USD")
@@ -109,6 +121,19 @@ MEDIA_URL = "media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# Operational signals (stale embeddings excluded from search, an unreachable
+# answer engine, dropped citation markers) are logged at INFO/WARNING by the
+# project loggers. They go to stderr, which systemd/gunicorn capture — see
+# docs/runbook.md §9.
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {"standard": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    "handlers": {"console": {"class": "logging.StreamHandler", "formatter": "standard"}},
+    "root": {"handlers": ["console"], "level": "WARNING"},
+    "loggers": {name: {"level": "INFO"} for name in ("accounts", "audit", "chat", "corpus")},
+}
 
 # ---------------------------------------------------------------------------
 # District Brain configuration

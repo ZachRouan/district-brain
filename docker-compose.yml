@@ -1,15 +1,18 @@
-# Development database: PostgreSQL with the pgvector extension.
-# Host port 54320 avoids colliding with any Postgres already on 5432.
+# PostgreSQL with the pgvector extension.
+# Credentials are read from .env (Compose loads it automatically) so the app and
+# the database always agree; the defaults after ":-" match .env.example.
+# Host port 54320 avoids colliding with any Postgres already on 5432, and the
+# port is bound to loopback so nothing else on the LAN can reach the database.
 services:
   db:
     image: pgvector/pgvector:pg17
     restart: unless-stopped
     environment:
-      POSTGRES_DB: districtbrain
-      POSTGRES_USER: districtbrain
-      POSTGRES_PASSWORD: districtbrain  # dev only — set a real password in production (see docs/runbook.md)
+      POSTGRES_DB: ${POSTGRES_DB:-districtbrain}
+      POSTGRES_USER: ${POSTGRES_USER:-districtbrain}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-districtbrain}
     ports:
-      - "54320:5432"
+      - "127.0.0.1:54320:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
