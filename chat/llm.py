@@ -18,6 +18,7 @@ class LLMBackendUnavailable(Exception):
     """The answer engine could not be reached or timed out. ask() turns this
     into a friendly notice for the user and an audited failure — never a 500."""
 
+
 SYSTEM_PROMPT = """\
 You are District Brain, the internal assistant for {district}. Answer the \
 staff member's question using ONLY the numbered source passages provided. \
@@ -86,14 +87,21 @@ class LlamaCppServerBackend:
                 json=self.build_payload(question, retrieved),
                 timeout=self.timeout,
             )
-        except (requests.ConnectionError, requests.Timeout) as exc:
-            # A closet box, a crashed llama-server, a wrong URL: don't 500. Signal
-            # unavailability so ask() can answer gracefully and audit the failure.
+            response.raise_for_status()
+            choice = response.json()["choices"][0]
+            content = (choice.get("message", {}).get("content") or "").strip()
+        except requests.RequestException as exc:
+            # A closet box, a crashed llama-server, a wrong URL, or an HTTP error
+            # (llama-server answers 503 while a model is still loading): don't
+            # 500. Signal unavailability so ask() can answer gracefully and audit
+            # the failure.
             raise LLMBackendUnavailable(f"{self.base_url}: {exc}") from exc
-        response.raise_for_status()
-
-        choice = response.json()["choices"][0]
-        content = (choice.get("message", {}).get("content") or "").strip()
+        except (ValueError, LookupError, AttributeError) as exc:
+            # A reachable server that did not speak the chat-completions schema:
+            # a non-JSON body, an error object with no "choices". Same treatment.
+            raise LLMBackendUnavailable(
+                f"{self.base_url}: unexpected response from the answer engine ({exc!r})"
+            ) from exc
         if not content:
             # A reachable server that returns no answer text — most often a
             # reasoning model whose thinking consumed the whole token budget

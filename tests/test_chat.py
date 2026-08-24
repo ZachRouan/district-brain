@@ -193,7 +193,10 @@ def test_thinking_is_disabled_by_default_in_the_payload(monkeypatch, teacher, ha
         def json(self):
             return {"choices": [{"message": {"content": "After school. [1]"}, "finish_reason": "stop"}]}
 
-    monkeypatch.setattr("chat.llm.requests.post", lambda url, json=None, timeout=None: (captured.update(json=json), FakeResponse())[1])
+    monkeypatch.setattr(
+        "chat.llm.requests.post",
+        lambda url, json=None, timeout=None: (captured.update(json=json), FakeResponse())[1],
+    )
     results = retrieve(teacher, "confiscated phone")
     LlamaCppServerBackend().generate("q", results)
     assert captured["json"]["chat_template_kwargs"] == {"enable_thinking": False}
@@ -259,3 +262,55 @@ def test_ask_gives_friendly_notice_and_audits_when_engine_is_down(monkeypatch, t
     assert "unavailable" in log.error.lower()
     assert log.answer == UNREACHABLE_ANSWER
     assert len(log.retrieved) == 1  # forensics: what we fetched but couldn't answer from
+
+
+@pytest.mark.parametrize(
+    "response_factory",
+    [
+        pytest.param(lambda: _FakeHTTP(status=503), id="http-503-while-model-loads"),
+        pytest.param(lambda: _FakeHTTP(body=ValueError("not json")), id="non-json-body"),
+        pytest.param(
+            lambda: _FakeHTTP(body={"error": "model not loaded"}), id="error-object-without-choices"
+        ),
+        pytest.param(lambda: _FakeHTTP(body={"choices": []}), id="empty-choices"),
+    ],
+)
+def test_every_server_failure_mode_is_a_typed_unavailable(
+    monkeypatch, teacher, handbook, settings, response_factory
+):
+    """A reachable but unhealthy llama-server (HTTP error, garbage body, error
+    object) must surface as LLMBackendUnavailable — never as an unhandled 500."""
+    from chat.llm import LLMBackendUnavailable
+
+    monkeypatch.setattr("chat.llm.requests.post", lambda url, json=None, timeout=None: response_factory())
+    results = retrieve(teacher, "confiscated phone")
+    with pytest.raises(LLMBackendUnavailable):
+        LlamaCppServerBackend().generate("When is a confiscated phone returned?", results)
+
+
+class _FakeHTTP:
+    def __init__(self, status=200, body=None):
+        self.status = status
+        self.body = body if body is not None else {}
+
+    def raise_for_status(self):
+        if self.status >= 400:
+            raise requests.HTTPError(f"{self.status} Server Error")
+
+    def json(self):
+        if isinstance(self.body, Exception):
+            raise self.body
+        return self.body
+
+
+def test_server_failure_is_audited_not_a_500(monkeypatch, teacher, handbook, settings):
+    """End to end: a 503 from the engine yields the friendly notice and an audit
+    row with the error — the question is never lost."""
+    settings.LLM_BACKEND = "chat.llm.LlamaCppServerBackend"
+    monkeypatch.setattr("chat.llm.requests.post", lambda url, json=None, timeout=None: _FakeHTTP(status=503))
+    conversation = Conversation.objects.create(user=teacher)
+    message = ask(teacher, conversation, "When is a confiscated phone returned?")
+    assert message.content == UNREACHABLE_ANSWER
+    log = AuditLog.objects.get()
+    assert log.refused is True
+    assert "503" in log.error
