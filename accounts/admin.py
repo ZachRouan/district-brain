@@ -22,5 +22,5 @@ class RoleAdmin(admin.ModelAdmin):
 class UserAdmin(DjangoUserAdmin):
     list_display = ("username", "first_name", "last_name", "role", "is_staff", "is_active")
     list_filter = ("role", "is_staff", "is_active")
-    fieldsets = DjangoUserAdmin.fieldsets + (("District Brain", {"fields": ("role",)}),)
-    add_fieldsets = DjangoUserAdmin.add_fieldsets + (("District Brain", {"fields": ("role",)}),)
+    fieldsets = (*DjangoUserAdmin.fieldsets, ("District Brain", {"fields": ("role",)}))
+    add_fieldsets = (*DjangoUserAdmin.add_fieldsets, ("District Brain", {"fields": ("role",)}))

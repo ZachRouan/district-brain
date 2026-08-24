@@ -30,9 +30,7 @@ class Command(BaseCommand):
     def handle(self, *args, **options):
         embedder = get_embedder()
         identity = (embedder.backend, embedder.model_name, embedder.dimensions)
-        self.stdout.write(
-            f"Active embedder: backend={identity[0]!r} model={identity[1]!r} dim={identity[2]}"
-        )
+        self.stdout.write(f"Active embedder: backend={identity[0]!r} model={identity[1]!r} dim={identity[2]}")
 
         ingested = [d for d in Document.objects.all() if d.chunks.exists()]
         mismatched = [
@@ -41,17 +39,23 @@ class Command(BaseCommand):
         unknown = [d for d in ingested if not d.has_embedding_provenance()]
 
         if not mismatched and not unknown:
-            self.stdout.write(self.style.SUCCESS(f"All {len(ingested)} ingested document(s) match the active embedder."))
+            self.stdout.write(
+                self.style.SUCCESS(f"All {len(ingested)} ingested document(s) match the active embedder.")
+            )
             return
 
         for d in mismatched:
             b, m, dim = d.embedding_identity()
             self.stdout.write(
-                self.style.WARNING(f"  STALE     {d.title!r} — embedded with {b!r}/{m!r}/{dim} (excluded from search)")
+                self.style.WARNING(
+                    f"  STALE     {d.title!r} — embedded with {b!r}/{m!r}/{dim} (excluded from search)"
+                )
             )
         for d in unknown:
             self.stdout.write(
-                self.style.WARNING(f"  UNKNOWN   {d.title!r} — no provenance recorded (legacy; re-ingest to confirm)")
+                self.style.WARNING(
+                    f"  UNKNOWN   {d.title!r} — no provenance recorded (legacy; re-ingest to confirm)"
+                )
             )
 
         if not options["fix"]:
@@ -67,7 +71,9 @@ class Command(BaseCommand):
         for d in mismatched + unknown:
             if not d.source_file:
                 self.stdout.write(
-                    self.style.ERROR(f"  SKIPPED   {d.title!r} — no source file on record; re-upload it manually.")
+                    self.style.ERROR(
+                        f"  SKIPPED   {d.title!r} — no source file on record; re-upload it manually."
+                    )
                 )
                 continue
             result = ingest_document(d, force=True)

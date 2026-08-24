@@ -1,3 +1,5 @@
+import itertools
+
 from corpus.chunking import chunk_text
 
 PARAGRAPH = (
@@ -28,7 +30,7 @@ def test_consecutive_chunks_overlap():
     """Overlap keeps a fact that straddles a boundary findable in one chunk."""
     text = "\n\n".join(f"Paragraph {i}. {PARAGRAPH}" for i in range(20))
     chunks = chunk_text(text, max_chars=500, overlap=120)
-    for a, b in zip(chunks, chunks[1:]):
+    for a, b in itertools.pairwise(chunks):
         tail = a[-40:]
         assert tail in b, "next chunk should begin with the previous chunk's tail"
 
@@ -52,7 +54,10 @@ def test_form_feed_is_a_hard_chunk_boundary():
 
 def test_form_feed_keeps_short_table_rows_separate():
     # Two short rows that would otherwise pack into one ~1200-char chunk.
-    text = "Regular schedule: Period: First Period, Start: 7:50 AM\fRegular schedule: Period: Second Period, Start: 8:42 AM"
+    text = (
+        "Regular schedule: Period: First Period, Start: 7:50 AM"
+        "\fRegular schedule: Period: Second Period, Start: 8:42 AM"
+    )
     chunks = chunk_text(text)
     assert len(chunks) == 2
     assert chunks[0].endswith("7:50 AM")

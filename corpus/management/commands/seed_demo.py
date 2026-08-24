@@ -127,7 +127,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  {result.outcome:>9}  {title} ({result.chunk_count} chunks)")
 
         self.stdout.write(self.style.SUCCESS("\nDemo ready. Sign in at / with:"))
-        for username, first, last, role_slug, is_staff in USERS:
+        for username, _first, _last, role_slug, is_staff in USERS:
             note = "  (also Django admin console at /admin/)" if is_staff else ""
             self.stdout.write(f"  {username} / {DEMO_PASSWORD} — {role_slug}{note}")
         self.stdout.write("\nAll demo content is synthetic (fictional Maple Ridge USD).")

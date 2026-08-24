@@ -73,9 +73,7 @@ def test_legacy_document_without_provenance_stays_searchable(teacher):
     """A document ingested before provenance tracking (blank backend, null dim)
     is treated as compatible, so an upgrade doesn't dark out the existing corpus."""
     doc = ingest_scoped_doc(teacher.role)
-    Document.objects.filter(pk=doc.pk).update(
-        embedding_backend="", embedding_model="", embedding_dim=None
-    )
+    Document.objects.filter(pk=doc.pk).update(embedding_backend="", embedding_model="", embedding_dim=None)
     doc.refresh_from_db()
     assert doc.has_embedding_provenance() is False
     assert doc.is_embedding_stale() is False
@@ -84,7 +82,9 @@ def test_legacy_document_without_provenance_stays_searchable(teacher):
 
 def test_check_embeddings_reports_mismatches(teacher, capsys):
     doc = ingest_scoped_doc(teacher.role)
-    Document.objects.filter(pk=doc.pk).update(embedding_backend="other", embedding_model="x", embedding_dim=99)
+    Document.objects.filter(pk=doc.pk).update(
+        embedding_backend="other", embedding_model="x", embedding_dim=99
+    )
     call_command("check_embeddings")
     captured = capsys.readouterr()
     assert "STALE" in captured.out

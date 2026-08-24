@@ -44,7 +44,9 @@ class Citation(models.Model):
 
     message = models.ForeignKey(Message, on_delete=models.CASCADE, related_name="citations")
     chunk = models.ForeignKey("corpus.Chunk", null=True, blank=True, on_delete=models.SET_NULL)
-    rank = models.PositiveSmallIntegerField(help_text="1 = closest match; matches the [n] marker in the answer.")
+    rank = models.PositiveSmallIntegerField(
+        help_text="1 = closest match; matches the [n] marker in the answer."
+    )
     distance = models.FloatField(help_text="Cosine distance at retrieval time (0 = identical).")
     document_title = models.CharField(max_length=255)
     document_last_updated = models.DateField(null=True, blank=True)
