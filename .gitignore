@@ -15,7 +15,7 @@ db.sqlite3
 # Environment / secrets — never commit real credentials
 .env
 
-# Local tooling and private planning docs (not part of the public repo)
+# Private planning docs (not part of the public repo)
 PROJECT.md
 District Brain pitch deck/
 
