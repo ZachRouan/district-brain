@@ -5,6 +5,10 @@
 
 **Your district's entire knowledge, on your own hardware, answering only to your people.**
 
+![A teacher asks when a confiscated phone is returned; the answer cites Board Policy 5136 with the exact passage, its tier, and its last-updated date](docs/images/chat.png)
+
+*A real answer from a local llama.cpp model over the synthetic demo corpus. Every claim carries a citation; the sidebar shows exactly which documents this role can search.*
+
 District Brain is a locally hosted, retrieval-augmented AI assistant for K-12 school
 districts. Staff ask questions in plain language — *"What's our device-confiscation
 policy?"*, *"What time does early release end on Wednesdays?"* — and get answers grounded
@@ -133,7 +137,8 @@ Full setup, operations, and hand-off documentation: **[docs/runbook.md](docs/run
    account cannot monopolise the single answer engine.
 
 The full record of the Tier 1 security review and its fixes is in
-[docs/security-hardening-tier1.md](docs/security-hardening-tier1.md).
+[docs/security-hardening-tier1.md](docs/security-hardening-tier1.md). Found a hole? See
+[SECURITY.md](SECURITY.md).
 
 ## Development
 
