@@ -18,7 +18,7 @@ from django.db.models import Q
 from pgvector.django import CosineDistance
 
 from corpus.embeddings import get_embedder
-from corpus.models import Chunk, Document
+from corpus.models import Chunk, CurriculumMetadata, Document
 
 logger = logging.getLogger(__name__)
 
@@ -31,12 +31,27 @@ class RetrievedChunk:
 
 def visible_documents(user):
     """Every document this user's questions may search. The single source of
-    truth for scope — the chat UI's "what you can see" card uses it too."""
+    truth for scope — the chat UI's "what you can see" card and the download
+    view use it too.
+
+    Which tiers are *retrievable* is decided here, per tier, and is narrower
+    than which tiers may be *stored* (Document.ENABLED_TIERS):
+
+    - Tier 1: role-scoped.
+    - Tier 2: role-scoped, and only district-consensus curriculum (maps, pacing
+      guides). Teacher-authored plans need the relationship engine that does
+      not exist yet, so they — and any Tier 2 row without curriculum
+      metadata — are excluded. When in doubt, exclude.
+    """
     if user is None or not user.is_authenticated or user.role_id is None:
         return Document.objects.none()
+    consensus = CurriculumMetadata.AuthorshipLevel.DISTRICT_CONSENSUS
+    retrievable = Q(tier=Document.Tier.TIER_1) | Q(
+        tier=Document.Tier.TIER_2, curriculum__authorship_level=consensus
+    )
     return Document.objects.filter(
+        retrievable,
         status=Document.Status.READY,
-        tier__in=Document.ENABLED_TIERS,
         allowed_roles=user.role_id,
     )
 

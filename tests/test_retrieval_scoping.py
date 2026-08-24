@@ -164,3 +164,44 @@ def test_visible_documents_is_the_single_scoping_source(users, corpus):
     exactly with what retrieval can reach."""
     visible = set(visible_documents(users["staff"]).values_list("id", flat=True))
     assert visible == {corpus["everyone"].id}
+
+
+# --- Tier 2: only district-consensus curriculum is retrievable until the
+#     relationship engine exists. Teacher-authored plans stay invisible. ---
+
+
+def make_tier2(title, authorship, roles):
+    from corpus.models import CurriculumMetadata
+
+    doc = Document.objects.create(title=title, tier=2, status=Document.Status.READY)
+    doc.allowed_roles.set(roles)
+    text = f"{title}: fractions are introduced in week 12 with number lines."
+    Chunk.objects.create(document=doc, index=0, text=text, embedding=get_embedder().embed_query(text))
+    if authorship is not None:
+        CurriculumMetadata.objects.create(document=doc, authorship_level=authorship)
+    return doc
+
+
+def test_tier2_district_consensus_curriculum_is_retrievable_by_role(roles, users):
+    from corpus.models import CurriculumMetadata
+
+    doc = make_tier2(
+        "Grade 3 math pacing guide", CurriculumMetadata.AuthorshipLevel.DISTRICT_CONSENSUS, [roles["teacher"]]
+    )
+    assert doc in visible_documents(users["teacher"])
+    assert doc not in visible_documents(users["staff"])  # role scoping still applies
+    assert any(
+        r.chunk.document_id == doc.id for r in retrieve(users["teacher"], "when are fractions introduced")
+    )
+
+
+@pytest.mark.parametrize("authorship", ["individual_teacher", "school", None])
+def test_tier2_non_consensus_or_unlabelled_documents_are_never_retrievable(roles, users, authorship):
+    """A teacher-authored plan is section-scoped by design and there is no
+    relationship engine yet; a Tier 2 row with no metadata is unclassified.
+    Both are excluded even though the role is allowed — when in doubt, exclude."""
+    doc = make_tier2("Ms. Alvarez's unit plan", authorship, [roles["teacher"]])
+    assert doc not in visible_documents(users["teacher"])
+    assert not any(
+        r.chunk.document_id == doc.id for r in retrieve(users["teacher"], "when are fractions introduced")
+    )
