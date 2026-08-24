@@ -110,13 +110,13 @@ Full setup, operations, and hand-off documentation: **[docs/runbook.md](docs/run
 
 1. Role scoping is enforced in the retrieval query itself (`chat/retrieval.py`); there is
    no user-facing code path that searches unscoped chunks. `retrieve()` also clamps its own
-   `top_k` and distance arguments, so no caller can widen a search. (The Django admin
-   console is operator tooling: it is gated by `is_staff`, not by district role, and is
-   meant for the coordinator who loads the corpus — see runbook §4.)
+   `top_k` and distance arguments, so no caller can widen a search. The operator console
+   (Django admin) is not role-scoped, so it opens only for superusers.
 2. Corpus documents are treated as untrusted input. Instructions embedded in a document
    can, at worst, influence the wording of an answer for users already entitled to that
-   document — they cannot widen retrieval scope. The test suite proves this with a
-   poisoned document.
+   document — they cannot widen retrieval scope. Each passage reaches the model inside its
+   own `<source>` element, so a document cannot forge a passage header and put words under
+   another document's name. The test suite proves both with poisoned documents.
 3. Original files are served only through an authenticated, per-user-scoped download
    view; `MEDIA_ROOT` is never mounted as a URL, even in `DEBUG`.
 4. Every exchange is audited atomically with the answer, including refusals and engine
@@ -126,6 +126,11 @@ Full setup, operations, and hand-off documentation: **[docs/runbook.md](docs/run
 6. A database `CheckConstraint` refuses Tier 3 (student-record) documents by any code
    path, and every embedded document records which embedder produced it, so a model swap
    can't silently corrupt similarity search.
+7. Retrieval is narrower than storage: Tier 2 documents are searchable only when tagged as
+   district-consensus curriculum. Teacher-authored plans stay invisible until the
+   relationship-based access engine exists.
+8. Questions are length-capped and rate-limited per user before anything is stored, so one
+   account cannot monopolise the single answer engine.
 
 The full record of the Tier 1 security review and its fixes is in
 [docs/security-hardening-tier1.md](docs/security-hardening-tier1.md).

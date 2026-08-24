@@ -44,7 +44,7 @@ docker compose up -d
 uv sync
 uv run python manage.py migrate
 uv run python manage.py createsuperuser        # your own console account
-uv run python manage.py seed_demo              # optional: synthetic demo corpus + demo users
+uv run python manage.py seed_demo              # optional: synthetic demo corpus + demo users (DEBUG=true only; see §4)
 uv run python manage.py runserver 0.0.0.0:8800 # dev serving; production in §9
 ```
 
@@ -58,12 +58,14 @@ with its last-updated date.
   `staff`; add more (e.g. `custodian`, `board`) as your document scoping needs them.
 - Every user holds **one role**, assigned in **admin → Accounts → Users**. A user with
   no role can sign in but retrieves nothing — that's the safe default for new accounts.
-- `is_staff` / `is_superuser` control access to the Django admin console (corpus
-  management + audit), independent of the district role. **The console is not role-scoped**:
-  anyone you make `is_staff` can read every document's chunks and the full audit log. Grant
-  it only to the people who load the corpus — normally just the coordinator.
+- The Django admin console (corpus management + audit) opens **only for superusers**. It is
+  not role-scoped — it shows every document's chunks and the full audit log — so `is_staff`
+  alone is deliberately not enough. Make superusers only the people who load the corpus,
+  normally just the coordinator.
 - Demo users (`demo_admin`, `demo_teacher`, `demo_staff`, password `brain-demo-2026`)
-  are for evaluation only — delete them before real staff use:
+  are for evaluation only. `demo_admin` is a superuser and the password is public, so
+  `seed_demo` refuses to run with `DEBUG=false` unless you pass `--force`. Delete the demo
+  users before real staff use:
   `uv run python manage.py shell -c "from accounts.models import User; User.objects.filter(username__startswith='demo_').delete()"`
 
 ## 5. Loading documents
@@ -138,7 +140,9 @@ verbatim quotes of retrieved passages). To use a real local model:
 
 That is the entire switch. Retrieval scoping, citations, refusal behavior, and auditing
 are identical in both modes — the model only ever sees passages the asking user was
-entitled to. The system prompt lives in `chat/llm.py` (`SYSTEM_PROMPT`).
+entitled to, each wrapped in its own `<source>` element so a document cannot forge a
+passage under another document's name. The system prompt lives in `chat/llm.py`
+(`SYSTEM_PROMPT`).
 
 **Reasoning models (Qwen3, DeepSeek-R1, etc.):** these emit chain-of-thought that llama.cpp
 returns in a separate `reasoning_content` field. Left on, it burns the generation budget and
@@ -266,7 +270,19 @@ scope, so the model never saw it. Check the audit row to confirm what was retrie
   uv run python manage.py check_embeddings --fix    # re-ingest with the active embedder
   ```
 
-## 12. Troubleshooting
+## 12. Abuse limits
+
+- `ASK_MAX_QUESTION_CHARS` (default 2000): longer questions are rejected with a message and
+  nothing is stored.
+- `ASK_RATE_LIMIT_PER_MINUTE` (default 30, `0` disables): per user. Counted in the Django
+  cache, which is per-process by default — with `--workers 2` the effective ceiling is up to
+  double. Rejections are logged to stderr (§9) but not audited, since they never reach
+  retrieval.
+- Tier 2 documents are searchable only when their curriculum metadata says
+  `district_consensus`; teacher-authored plans and untagged Tier 2 rows are excluded until
+  the relationship engine ships.
+
+## 13. Troubleshooting
 
 | Symptom | Check |
 |---|---|
