@@ -1,4 +1,9 @@
+from django import forms
 from django.contrib import admin, messages
+from django.db import models
+from django.db.models import Count
+from django.urls import reverse
+from django.utils.html import format_html
 
 from .ingest import ingest_document
 from .models import Chunk, Document
@@ -7,6 +12,10 @@ from .models import Chunk, Document
 @admin.register(Document)
 class DocumentAdmin(admin.ModelAdmin):
     actions = ["reingest"]
+    # The default file widget links the current file at its /media/ URL, which
+    # this app never serves (see districtbrain/urls.py). Use a plain upload
+    # widget and show the file through the scoped download view instead.
+    formfield_overrides = {models.FileField: {"widget": forms.FileInput}}
     list_display = (
         "title",
         "tier",
@@ -20,9 +29,10 @@ class DocumentAdmin(admin.ModelAdmin):
     list_filter = ("status", "tier", "allowed_roles")
     search_fields = ("title", "source_name")
     filter_horizontal = ("allowed_roles",)
-    readonly_fields = ("status", "error_message", "content_hash", "created_at", "ingested_at")
+    readonly_fields = ("current_file", "status", "error_message", "content_hash", "created_at", "ingested_at")
     fields = (
         "title",
+        "current_file",
         "source_file",
         "source_name",
         "tier",
@@ -34,13 +44,25 @@ class DocumentAdmin(admin.ModelAdmin):
         "ingested_at",
     )
 
+    def get_queryset(self, request):
+        return (
+            super().get_queryset(request).prefetch_related("allowed_roles").annotate(n_chunks=Count("chunks"))
+        )
+
+    @admin.display(description="Current file")
+    def current_file(self, obj):
+        if not obj.pk or not obj.source_file:
+            return "—"
+        url = reverse("chat:document_download", args=[obj.pk])
+        return format_html('<a href="{}">{}</a>', url, obj.source_file.name.rsplit("/", 1)[-1])
+
     @admin.display(description="Visible to")
     def role_list(self, obj):
-        return ", ".join(obj.allowed_roles.values_list("name", flat=True)) or "— nobody —"
+        return ", ".join(r.name for r in obj.allowed_roles.all()) or "— nobody —"
 
-    @admin.display(description="Chunks")
+    @admin.display(description="Chunks", ordering="n_chunks")
     def chunk_count(self, obj):
-        return obj.chunks.count()
+        return obj.n_chunks
 
     @admin.display(description="Embedding stale")
     def embedding_stale(self, obj):
@@ -87,4 +109,7 @@ class ChunkAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
         return False
